@@ -1,0 +1,219 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+///////////////////////
+// ENUMS
+///////////////////////
+enum NotificationType {
+  REMINDER
+  MOTIVATIONAL
+  SYSTEM
+}
+
+
+enum DreamStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  FAILED
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  BLOCKED
+}
+
+enum EventStatus {
+  PENDING
+  PROCESSED
+  FAILED
+}
+
+enum NotificationStatus {
+  SCHEDULED
+  SENT
+  FAILED
+  ARCHIVED
+}
+
+enum LogLevel {
+  INFO
+  WARN
+  ERROR
+}
+
+enum MotivationTone {
+  HARSH
+  POSITIVE
+  OPTIMISTIC
+  FEAR
+  LOGICAL
+  NEUTRAL
+}
+
+///////////////////////
+// USER & AUTH
+///////////////////////
+
+model User {
+  id             String   @id @default(uuid())
+  name           String?
+  email          String   @unique
+  passwordHash   String
+  timezone       String   @default("UTC")
+
+  preferences    UserPreference?
+  dreams         Dream[]
+  tasks          Task[]
+  notifications  Notification[]
+  logs           AppLog[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model UserPreference {
+  id                     String          @id @default(uuid())
+  userId                 String          @unique
+
+  motivationTone         MotivationTone  @default(NEUTRAL)
+  notificationFrequency  Int             // minutes
+
+  sleepStart             String          // "23:30"
+  sleepEnd               String          // "06:30"
+
+  quietHours             Json            // [{ "start": "07:00", "end": "09:00" }]
+
+  user                   User            @relation(fields: [userId], references: [id])
+
+  createdAt              DateTime        @default(now())
+}
+
+///////////////////////
+// DREAM
+///////////////////////
+
+model Dream {
+  id                    String        @id @default(uuid())
+  userId                String
+
+  title                 String
+  description           String
+  motivationStatement   String?       // emotional "why" behind the dream
+  deadline              DateTime
+  impactScore           Int
+
+  status                DreamStatus   @default(DRAFT)
+
+  user                  User          @relation(fields: [userId], references: [id])
+  checkpoints           DreamCheckpoint[]
+  tasks                 Task[]
+  notifications         Notification[]
+
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+}
+
+model DreamCheckpoint {
+  id               String   @id @default(uuid())
+  dreamId          String
+
+  title            String
+  description      String?
+  expectedEffort   Int?
+  miniDeadline     DateTime?
+  orderIndex       Int
+  isUserModified   Boolean  @default(false)
+
+  dream            Dream    @relation(fields: [dreamId], references: [id])
+
+  createdAt        DateTime @default(now())
+}
+
+///////////////////////
+// TASK
+///////////////////////
+
+model Task {
+  id                String      @id @default(uuid())
+  userId            String
+  dreamId           String
+
+  title             String
+  description       String?
+  startDate         DateTime?    // ✅ when reminders begin
+  deadline          DateTime
+  estimatedDuration Int?
+  priority          Int
+  status            TaskStatus   @default(PENDING)
+  completedAt       DateTime?    // ✅ when task was finished
+
+  user              User        @relation(fields: [userId], references: [id])
+  dream             Dream       @relation(fields: [dreamId], references: [id])
+  notifications     Notification[]
+
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+}
+
+
+///////////////////////
+// DOMAIN EVENTS (EVENT-DRIVEN CORE)
+///////////////////////
+
+model DomainEvent {
+  id          String      @id @default(uuid())
+  eventType   String
+  payload     Json
+  status      EventStatus @default(PENDING)
+  processedAt DateTime?   // ✅ idempotency & reliability
+
+  createdAt   DateTime    @default(now())
+}
+
+///////////////////////
+// NOTIFICATIONS
+///////////////////////
+
+model Notification {
+  id           String              @id @default(uuid())
+  userId       String
+  dreamId      String?
+  taskId       String?
+
+  type         NotificationType    // ✅ why this notification exists
+  message      String
+  scheduledAt  DateTime
+  status       NotificationStatus  @default(SCHEDULED)
+
+  user         User                @relation(fields: [userId], references: [id])
+  dream        Dream?              @relation(fields: [dreamId], references: [id])
+  task         Task?               @relation(fields: [taskId], references: [id])
+
+  createdAt    DateTime            @default(now())
+}
+
+///////////////////////
+// APPLICATION LOGS
+///////////////////////
+
+model AppLog {
+  id        String    @id @default(uuid())
+  level     LogLevel
+  source    String   // auth | dream | task | notification | ai
+  message   String
+  context   Json?
+
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+}
