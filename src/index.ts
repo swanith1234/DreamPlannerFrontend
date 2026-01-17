@@ -4,7 +4,7 @@ import { logger } from './utils/logger';
 import { createApp } from './app';
 import { eventWorker } from './modules/event/event.worker';
 import { initializeNotificationQueue, closeNotificationQueue } from './modules/notification/queue';
-import { notificationQueueWorker } from './modules/notification/queueu-worker';
+import { notificationQueueWorker } from './modules/notification/queue-worker';
 import { emailProvider } from './modules/notification/providers/email.provider';
 import { disconnectRedis } from './config/queue';
 

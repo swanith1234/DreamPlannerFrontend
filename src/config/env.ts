@@ -28,6 +28,7 @@ export const env = {
     provider: process.env.EMAIL_PROVIDER || 'ethereal', // 'ethereal' | 'smtp'
     from: process.env.EMAIL_FROM || 'swanithpidugu@gmail.com',
     // SMTP Config (for production)
+    brevoApiKey: process.env.BREVO_API_KEY || '',
     smtp: {
       host: process.env.SMTP_HOST || '',
       port: parseInt(process.env.SMTP_PORT || '587', 10),

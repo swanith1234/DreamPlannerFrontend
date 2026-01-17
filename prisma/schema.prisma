@@ -42,6 +42,7 @@ enum NotificationStatus {
   SENT
   FAILED
   ARCHIVED
+  PROCESSING
 }
 
 enum LogLevel {

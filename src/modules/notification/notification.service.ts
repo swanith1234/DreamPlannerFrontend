@@ -3,15 +3,10 @@ import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import { notificationScheduler, ScheduledNotification } from './notification.scheduler';
 import { NotificationStatus } from '@prisma/client';
-import { enqueueNotificationJob } from './queue';
-import { generateNotificationMessageWithLLM } from './llm-provider';
 
 export class NotificationService {
   /**
-   * Create a single notification and enqueue to BullMQ
-   * 
-   * IMPORTANT: DB write MUST happen before queue enqueue
-   * This ensures notification exists when worker processes job
+   * Create a single notification
    */
   async createNotification(
     userId: string,
@@ -20,74 +15,26 @@ export class NotificationService {
     notification: ScheduledNotification
   ): Promise<any> {
     try {
-      // STEP 1: Generate message using LLM
-      let message = notification.message;
-      
-      // If message is empty, generate from LLM
-      if (!message || message.trim().length === 0) {
-        try {
-          // Get user with preferences and task/dream context
-          const user = await prisma.user.findUnique({
-            where: { id: userId },
-            include: { preferences: true },
-          });
-
-          const task = taskId ? await prisma.task.findUnique({ where: { id: taskId } }) : null;
-          const dream = dreamId ? await prisma.dream.findUnique({ where: { id: dreamId } }) : null;
-
-          if (user?.preferences) {
-            message = await generateNotificationMessageWithLLM({
-              notificationType: notification.type,
-              userTone: user.preferences.motivationTone,
-              task,
-              dream,
-            });
-          }
-        } catch (llmError: any) {
-          await logger.warn('notification', 'LLM message generation failed, using default', {
-            error: llmError.message,
-          });
-          // Fallback to default message
-          message = notification.message || 'You have a notification from DreamPlanner';
-        }
-      }
-
-      // STEP 2: Save notification to DB (SCHEDULED status)
       const created = await prisma.notification.create({
         data: {
           userId,
           dreamId,
           taskId,
           type: notification.type,
-          message,
+          message: notification.message,
           scheduledAt: notification.scheduledAt,
           status: NotificationStatus.SCHEDULED,
         },
       });
 
-      // STEP 3: Enqueue to BullMQ with delay
-      const now = new Date();
-      const delayMs = Math.max(notification.scheduledAt.getTime() - now.getTime(), 0);
-
-      try {
-        await enqueueNotificationJob(created.id, delayMs);
-      } catch (queueError: any) {
-        // If queue fails, still mark as created (worker can pick it up on restart)
-        await logger.error('notification', 'Failed to enqueue notification job', {
-          error: queueError.message,
-          notificationId: created.id,
-        });
-      }
-
       await logger.info(
         'notification',
-        'Notification created and queued',
+        'Notification created (just-in-time)',
         {
           notificationId: created.id,
           taskId,
           scheduledAt: notification.scheduledAt.toISOString(),
           type: notification.type,
-          delayMs,
         },
         userId
       );
@@ -123,10 +70,10 @@ export class NotificationService {
         throw new Error('User preferences not found');
       }
 
-      // Get pre-start reminders from scheduler
+      // Get pre-start reminders
       const reminders = notificationScheduler.getPreStartReminders(startDate, user);
 
-      // Create each reminder (each will be enqueued to BullMQ)
+      // Create each reminder
       for (const reminder of reminders) {
         await this.createNotification(userId, dreamId, taskId, reminder);
       }
@@ -147,7 +94,7 @@ export class NotificationService {
 
   /**
    * Schedule next frequency-based reminder
-   * Called by notification queue worker after successful dispatch
+   * Called by notification worker after marking notification as SENT
    */
   async scheduleNextReminder(
     userId: string,
@@ -217,7 +164,7 @@ export class NotificationService {
         return;
       }
 
-      // Create next notification (will be enqueued to BullMQ)
+      // Create next notification
       await this.createNotification(userId, dreamId, taskId, nextNotif);
 
       await logger.info(
@@ -264,6 +211,43 @@ export class NotificationService {
       await logger.error('notification', 'Failed to archive notifications', {
         error: error.message,
         taskId,
+      });
+    }
+  }
+
+  /**
+   * Get due notifications (for worker)
+   */
+  async getDueNotifications(limit: number = 100): Promise<any[]> {
+    
+    return prisma.notification.findMany({
+      where: {
+        status: NotificationStatus.SCHEDULED,
+        scheduledAt: { lte: new Date() },
+      },
+      orderBy: { scheduledAt: 'asc' },
+      take: limit,
+      include: {
+        user: { include: { preferences: true } },
+        task: true,
+        dream: true,
+      },
+    });
+  }
+
+  /**
+   * Mark notification as sent
+   */
+  async markNotificationSent(notificationId: string): Promise<void> {
+    try {
+      await prisma.notification.update({
+        where: { id: notificationId },
+        data: { status: NotificationStatus.SENT },
+      });
+    } catch (error: any) {
+      await logger.error('notification', 'Failed to mark notification sent', {
+        error: error.message,
+        notificationId,
       });
     }
   }
