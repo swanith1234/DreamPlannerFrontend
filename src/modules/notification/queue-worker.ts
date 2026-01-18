@@ -80,7 +80,7 @@ export class NotificationQueueWorker {
           dream: true,
         },
       });
-
+console.log('Processing notification:', notification);
       if (!notification) {
         await logger.warn('queue', 'Notification not found', { notificationId });
         return;
@@ -88,7 +88,7 @@ export class NotificationQueueWorker {
 
       // STEP 2: Check if already processed (idempotency)
       // Skip atomic update since PROCESSING status doesn't exist
-      if (notification.status !== NotificationStatus.SCHEDULED) {
+      if (notification.status !== NotificationStatus.PROCESSING) {
         await logger.info(
           'queue',
           'Notification already processed',
@@ -100,9 +100,9 @@ export class NotificationQueueWorker {
       // STEP 3: Dispatch notification (email, push, etc.)
       const dispatchResult = await notificationDispatcher.dispatch({
         notification,
-        user: notification.user,
-        task: notification.task || undefined,
-        dream: notification.dream || undefined,
+        user: (notification as any).user,
+        task: (notification as any).task || undefined,
+        dream: (notification as any).dream || undefined,
       });
 
       // STEP 4: Update DB based on dispatch result
