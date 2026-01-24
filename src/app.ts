@@ -6,14 +6,20 @@ import authRoutes from './modules/auth/auth.routes';
 import dreamRoutes from './modules/dream/dream.route';
 import taskRoutes from './modules/task/task.route';
 import notificationRoutes from './modules/notification/notification.route';
-
+import cors from 'cors';
 export function createApp(): Express {
   const app = express();
 
   // Middleware
   app.use(express.json());
   app.use(requestLogger);
-
+  app.use(
+    cors({
+      origin: '*',
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+    })
+  );
   // Health check
   app.get('/health', (req, res) => {
     res.json({ status: 'ok' });
