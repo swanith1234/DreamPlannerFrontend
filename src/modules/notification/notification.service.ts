@@ -2,7 +2,9 @@
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import { notificationScheduler, ScheduledNotification } from './notification.scheduler';
-import { NotificationStatus } from '@prisma/client';
+import { User, Task, NotificationStatus, MotivationTone } from '@prisma/client';
+
+import { generateNotificationMessageWithLLM } from './llm-provider';
 
 export class NotificationService {
   /**
@@ -164,6 +166,39 @@ export class NotificationService {
         return;
       }
 
+      // -----------------------------------------------------------------------
+      // [NEW] Generate dynamic message via LLM
+      // -----------------------------------------------------------------------
+      try {
+        const taskWithCheckpoints = await prisma.task.findUnique({
+          where: { id: taskId },
+          include: { checkpoints: true }
+        });
+
+        const llmMessage = await generateNotificationMessageWithLLM({
+          notificationType: 'REMINDER',
+          userTone: user.preferences.motivationTone,
+          task: taskWithCheckpoints,
+          dream: await prisma.dream.findUnique({ where: { id: dreamId } }),
+          timeOfDay: new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening',
+          // optimization: find today's checkpoint
+          checkpoint: taskWithCheckpoints?.checkpoints.find(c => !c.isCompleted),
+          progress: {
+            current: task.progressPercent || 0,
+            lastUpdated: task.lastProgressAt || undefined
+          }
+        });
+
+        if (llmMessage) {
+          nextNotif.message = llmMessage;
+        }
+      } catch (error) {
+        // Fallback to static message inside nextNotif if LLM fails
+        // Log is handled inside generateNotificationMessageWithLLM but we can debug log here
+        console.log('LLM generation skipped/failed, using default');
+      }
+      // -----------------------------------------------------------------------
+
       // Create next notification
       await this.createNotification(userId, dreamId, taskId, nextNotif);
 
@@ -173,6 +208,7 @@ export class NotificationService {
         {
           taskId,
           scheduledAt: nextNotif.scheduledAt.toISOString(),
+          messageGenerated: !!nextNotif.message
         },
         userId
       );
