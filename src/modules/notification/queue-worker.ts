@@ -1,6 +1,7 @@
 // src/modules/notification/queue-worker.ts
 import { Worker, Job } from 'bullmq';
 import { getRedisClient } from '../../config/queue';
+import { generateNotificationMessageWithLLM } from './llm-provider';
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import { notificationDispatcher } from './dispatcher';
@@ -75,12 +76,16 @@ export class NotificationQueueWorker {
       const notification = await prisma.notification.findUnique({
         where: { id: notificationId },
         include: {
-          user: true,
-          task: true,
+          user: {
+            include: { preferences: true }
+          },
+          task: {
+            include: { checkpoints: true }
+          },
           dream: true,
         },
       });
-console.log('Processing notification:', notification);
+      console.log('Processing notification:', notification);
       if (!notification) {
         await logger.warn('queue', 'Notification not found', { notificationId });
         return;
@@ -95,6 +100,38 @@ console.log('Processing notification:', notification);
           { notificationId, status: notification.status }
         );
         return;
+      }
+
+      // STEP 2.5: JIT Content Generation (LLM)
+      // Only for REMINDERS that need fresh context
+      if (notification.type === 'REMINDER' && notification.user.preferences) {
+        try {
+          const llmMessage = await generateNotificationMessageWithLLM({
+            notificationType: 'REMINDER',
+            userTone: notification.user.preferences.motivationTone,
+            task: notification.task,
+            dream: notification.dream,
+            timeOfDay: new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening',
+            checkpoint: notification.task?.checkpoints?.find((c: any) => !c.isCompleted),
+            progress: {
+              current: notification.task?.progressPercent || 0,
+              lastUpdated: notification.task?.lastProgressAt || undefined
+            }
+          });
+
+          if (llmMessage) {
+            // Update in-memory object for dispatcher
+            notification.message = llmMessage;
+
+            // Persist to DB so "Sent" logs are accurate
+            await prisma.notification.update({
+              where: { id: notificationId },
+              data: { message: llmMessage }
+            });
+          }
+        } catch (err: any) {
+          console.error('JIT LLM generation failed, using original message:', err.message);
+        }
       }
 
       // STEP 3: Dispatch notification (email, push, etc.)
