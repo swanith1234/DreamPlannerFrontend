@@ -219,7 +219,7 @@ export class NotificationService {
    * Get due notifications (for worker)
    */
   async getDueNotifications(limit: number = 100): Promise<any[]> {
-    
+
     return prisma.notification.findMany({
       where: {
         status: NotificationStatus.SCHEDULED,
@@ -228,8 +228,14 @@ export class NotificationService {
       orderBy: { scheduledAt: 'asc' },
       take: limit,
       include: {
-        user: { include: { preferences: true } },
-        task: true,
+        user: { include: { preferences: true, tasks: { select: { id: true } } } }, // Fetch basic user data + prefs
+        task: {
+          include: {
+            checkpoints: {
+              orderBy: { orderIndex: 'asc' },
+            },
+          },
+        },
         dream: true,
       },
     });
@@ -246,6 +252,30 @@ export class NotificationService {
       });
     } catch (error: any) {
       await logger.error('notification', 'Failed to mark notification sent', {
+        error: error.message,
+        notificationId,
+      });
+    }
+  }
+
+  /**
+   * Update notification message and metadata (e.g. after LLM generation)
+   */
+  async updateNotificationMessage(
+    notificationId: string,
+    message: string,
+    metadata?: any
+  ): Promise<void> {
+    try {
+      await prisma.notification.update({
+        where: { id: notificationId },
+        data: {
+          message,
+          metadata,
+        },
+      });
+    } catch (error: any) {
+      await logger.error('notification', 'Failed to update notification message', {
         error: error.message,
         notificationId,
       });

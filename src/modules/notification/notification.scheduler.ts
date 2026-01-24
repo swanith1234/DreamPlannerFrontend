@@ -71,76 +71,85 @@ export class NotificationScheduler {
   }
 
   /**
-   * Schedule pre-start reminders (1 day before + day of)
-   * Only called during task creation (before task starts)
+   * Schedule ONE initial reminder based on start time.
+   * Phase-1 Rule: At any time, only ONE future reminder may exist.
    */
   getPreStartReminders(
-  startDate: Date,
-  user: User & { preferences: any }
-): ScheduledNotification[] {
-  const reminders: ScheduledNotification[] = [];
-  const userTz = user.timezone || 'UTC';
-  const nowUtc = new Date();
+    startDate: Date,
+    user: User & { preferences: any }
+  ): ScheduledNotification[] {
+    const reminders: ScheduledNotification[] = [];
+    const userTz = user.timezone || 'UTC';
+    const nowUtc = new Date();
 
-  const startLocal = this.toUserTime(startDate, userTz);
-  const nowLocal = this.toUserTime(nowUtc, userTz);
+    // Ensure we work with UTC for comparisons first, then adjust for User Time
+    const startUtc = new Date(startDate);
+    const diffMs = startUtc.getTime() - nowUtc.getTime();
+    const headers = 60 * 60 * 1000; // 1 hour
 
-  const diffMs = startLocal.getTime() - nowLocal.getTime();
-  const diffMinutes = diffMs / (1000 * 60);
-  const diffDays = diffMs / (1000 * 60 * 60 * 24);
+    // Case 1: Start time is more than 1 hour in the future
+    if (diffMs > headers) {
+      // Schedule 1 hour before start
+      let oneHourBefore = new Date(startUtc.getTime() - headers);
 
-  // 🔹 30 minutes before start (for ALL tasks if possible)
-  if (diffMinutes > 30) {
-    let thirtyMinBefore = new Date(startLocal);
-    thirtyMinBefore.setMinutes(thirtyMinBefore.getMinutes() - 30);
+      // Convert to user time to check sleep/quiet hours (though "1 hour before" is specific time)
+      // Actually, if 1hr before falls in sleep time, should we move it?
+      // "Get ready" might not be useful if you are sleeping. 
+      // User prefs say "sleep/quiet hours".
+      // But "1 hour before start" is derived from user-set Start Time. 
+      // If user sets Start Time at 8 AM, 1 hr before is 7 AM. If sleep ends 6:30, it's fine.
+      // If user sets Start Time 5 AM, 1 hr before is 4 AM.
+      // I will respect Sleep/Quiet hours for *all* notifications.
 
-    thirtyMinBefore = this.adjustForSleepCycle(
-      thirtyMinBefore,
-      user.preferences.sleepStart,
-      user.preferences.sleepEnd,
-      userTz
-    );
+      const adjusted = this.adjustForSleepAndQuiet(oneHourBefore, user, userTz);
 
-    thirtyMinBefore = this.adjustForQuietHours(
-      thirtyMinBefore,
-      user.preferences.quietHours,
-      userTz
-    );
+      reminders.push({
+        scheduledAt: this.toUtcTime(adjusted, userTz),
+        message: "Get ready to start your task soon!",
+        type: 'REMINDER',
+      });
+      return reminders;
+    }
 
-    reminders.push({
-      scheduledAt: this.toUtcTime(thirtyMinBefore, userTz),
-      message: `Reminder: Your task starts in 30 minutes`,
-      type: 'REMINDER',
-    });
+    // Case 2: Start time is in the future (but < 1 hour)
+    if (diffMs > 0) {
+      // Schedule AT start time
+      const adjusted = this.adjustForSleepAndQuiet(startUtc, user, userTz);
+
+      reminders.push({
+        scheduledAt: this.toUtcTime(adjusted, userTz),
+        message: "It's time to begin your task!",
+        type: 'REMINDER', // Will trigger "Let's begin" flow
+      });
+      return reminders;
+    }
+
+    // Case 3: Start time is in the past
+    // Schedule next valid slot immediately
+    const nextSlot = this.computeNextNotificationTime(nowUtc, user, new Date(startDate.getTime() + 24 * 60 * 60 * 1000), true); // Using dummy deadline or needs real one?
+    // Wait, getPreStartReminders doesn't have deadline. 
+    // In task.service.ts, we pass `input.startDate || new Date()`.
+    // We don't accept deadline here.
+    // I should update signature or just use a default "next valid slot" relative to now.
+    // The previous code didn't use computeNextNotificationTime here.
+
+    // If start time is past, we effectively treat it as "running".
+    // We should schedule the *first* frequency check.
+    const firstCheck = this.computeNextNotificationTime(nowUtc, user, new Date(8640000000000000), true); // Max date as deadline proxy functionality
+
+    if (firstCheck) {
+      reminders.push(firstCheck);
+    }
+
+    return reminders;
   }
 
-  // 🔹 1 day before ONLY if start is far away
-  if (diffDays > 2) {
-    let oneDayBefore = new Date(startLocal);
-    oneDayBefore.setDate(oneDayBefore.getDate() - 1);
-
-    oneDayBefore = this.adjustForSleepCycle(
-      oneDayBefore,
-      user.preferences.sleepStart,
-      user.preferences.sleepEnd,
-      userTz
-    );
-
-    oneDayBefore = this.adjustForQuietHours(
-      oneDayBefore,
-      user.preferences.quietHours,
-      userTz
-    );
-
-    reminders.push({
-      scheduledAt: this.toUtcTime(oneDayBefore, userTz),
-      message: `Reminder: Your task starts tomorrow`,
-      type: 'REMINDER',
-    });
+  private adjustForSleepAndQuiet(date: Date, user: any, timezone: string): Date {
+    let current = this.toUserTime(date, timezone);
+    current = this.adjustForSleepCycle(current, user.preferences.sleepStart, user.preferences.sleepEnd, timezone);
+    current = this.adjustForQuietHours(current, user.preferences.quietHours, timezone);
+    return current;
   }
-
-  return reminders;
-}
 
 
   /**
@@ -227,28 +236,28 @@ export class NotificationScheduler {
   /**
    * Convert UTC time to user's local time
    */
-private toUserTime(date: Date, timezone: string): Date {
-  return new Date(
-    date.toLocaleString('en-US', { timeZone: timezone })
-  );
-}
+  private toUserTime(date: Date, timezone: string): Date {
+    return new Date(
+      date.toLocaleString('en-US', { timeZone: timezone })
+    );
+  }
 
 
   /**
    * Convert local time back to UTC
    */
- private toUtcTime(localTime: Date, timezone: string): Date {
-  // Interpret the localTime as if it belongs to the given timezone
-  const tzInterpreted = new Date(
-    localTime.toLocaleString('en-US', { timeZone: timezone })
-  );
+  private toUtcTime(localTime: Date, timezone: string): Date {
+    // Interpret the localTime as if it belongs to the given timezone
+    const tzInterpreted = new Date(
+      localTime.toLocaleString('en-US', { timeZone: timezone })
+    );
 
-  // Calculate the offset between interpreted time and actual time
-  const offset = tzInterpreted.getTime() - localTime.getTime();
+    // Calculate the offset between interpreted time and actual time
+    const offset = tzInterpreted.getTime() - localTime.getTime();
 
-  // Remove offset to get true UTC
-  return new Date(localTime.getTime() - offset);
-}
+    // Remove offset to get true UTC
+    return new Date(localTime.getTime() - offset);
+  }
 
 
 

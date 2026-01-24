@@ -25,6 +25,22 @@ export class TaskController {
     }
   }
 
+  async updateProgress(req: AuthRequest, res: Response) {
+    try {
+      const { taskId } = req.params;
+      const { value } = req.body; // { value: number }
+
+      if (typeof value !== 'number' || value < 0 || value > 100) {
+        throw new Error('Invalid progress value');
+      }
+
+      const task = await taskService.updateProgress(taskId, req.userId!, value);
+      res.status(200).json(task);
+    } catch (error: any) {
+      res.status(error.statusCode || 500).json({ error: error.message });
+    }
+  }
+
   async complete(req: AuthRequest, res: Response) {
     try {
       const { taskId } = req.params;

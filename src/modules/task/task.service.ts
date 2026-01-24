@@ -19,26 +19,26 @@ export class TaskService {
       throw new NotFoundError('Dream');
     }
 
-   const now = new Date();
+    const now = new Date();
 
-// Validate deadline
-const deadline = new Date(input.deadline);
-if (deadline <= now) {
-  throw new ValidationError('Task deadline must be in the future');
-}
+    // Validate deadline
+    const deadline = new Date(input.deadline);
+    if (deadline <= now) {
+      throw new ValidationError('Task deadline must be in the future');
+    }
 
-// Validate start date
-if (input.startDate) {
-  const startDate = new Date(input.startDate);
+    // Validate start date
+    if (input.startDate) {
+      const startDate = new Date(input.startDate);
 
-  if (startDate < now) {
-    throw new ValidationError('Task start date cannot be in the past');
-  }
+      if (startDate < now) {
+        throw new ValidationError('Task start date cannot be in the past');
+      }
 
-  if (startDate > deadline) {
-    throw new ValidationError('Start date cannot be after deadline');
-  }
-}
+      if (startDate > deadline) {
+        throw new ValidationError('Start date cannot be after deadline');
+      }
+    }
 
     // AI validation
     const validation = await taskValidator.validateTaskRelevance(
@@ -64,6 +64,13 @@ if (input.startDate) {
         estimatedDuration: input.estimatedDuration,
         priority: input.priority,
         status: TaskStatus.PENDING,
+        checkpoints: {
+          create: input.checkpoints?.map((cp) => ({
+            title: cp.title,
+            targetDate: new Date(cp.targetDate),
+            orderIndex: cp.orderIndex,
+          })),
+        },
       },
     });
 
@@ -125,6 +132,47 @@ if (input.startDate) {
       'task',
       'Task updated',
       { taskId, changes: Object.keys(input) },
+      userId
+    );
+
+    return updated;
+  }
+
+  async updateProgress(
+    taskId: string,
+    userId: string,
+    progress: number
+  ): Promise<any> {
+    const task = await prisma.task.findUnique({ where: { id: taskId } });
+
+    if (!task || task.userId !== userId) {
+      throw new NotFoundError('Task');
+    }
+
+    const updated = await prisma.task.update({
+      where: { id: taskId },
+      data: {
+        progressPercent: progress,
+        lastProgressAt: new Date(),
+        // Auto-complete if 100%? Plan doesn't specify, but implied.
+        // Let's stick to explicit completion or progress.
+        // If 100%, user might still want to mark complete manually.
+        // User "Do NOT send instant follow-up".
+      },
+    });
+
+    // Log User Event
+    await eventService.publishEvent('task.progress_updated', {
+      taskId,
+      dreamId: task.dreamId,
+      userId,
+      progress,
+    });
+
+    await logger.info(
+      'task',
+      'Task progress updated',
+      { taskId, progress },
       userId
     );
 

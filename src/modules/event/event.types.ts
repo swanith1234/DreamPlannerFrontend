@@ -4,6 +4,7 @@ export type DomainEventType =
   | 'dream.failed'
   | 'task.created'
   | 'task.completed'
+  | 'task.progress_updated'
   | 'notification.scheduled';
 
 export interface DomainEventPayload {

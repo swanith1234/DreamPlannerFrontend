@@ -6,6 +6,13 @@ export interface CreateTaskRequest {
   deadline: string; // ISO date
   estimatedDuration?: number; // minutes
   priority: number; // 1-5
+  checkpoints?: CheckpointDto[];
+}
+
+export interface CheckpointDto {
+  title: string;
+  targetDate: string; // ISO date
+  orderIndex: number;
 }
 
 export interface UpdateTaskRequest {
