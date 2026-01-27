@@ -6,7 +6,7 @@ import PageTransition from '../components/PageTransition';
 import PageLoader from '../components/PageLoader';
 
 const SettingsPage: React.FC = () => {
-    const [tone, setTone] = useState<'friendly' | 'stoic' | 'harsh' | 'positive' | 'fear'>('friendly');
+    const [tone, setTone] = useState<'NEUTRAL' | 'LOGICAL' | 'HARSH' | 'POSITIVE' | 'OPTIMISTIC' | 'FEAR'>('NEUTRAL');
     const [notifications, setNotifications] = useState(true);
     const [particles, setParticles] = useState(true);
 
@@ -15,6 +15,27 @@ const SettingsPage: React.FC = () => {
     const [sleepEnd, setSleepEnd] = useState('07:00');
     const [notificationFrequency, setNotificationFrequency] = useState(60);
     const [isSaving, setIsSaving] = useState(false);
+    const [isLoading, setIsLoading] = useState(true); // Initial load state
+
+    React.useEffect(() => {
+        const fetchPreferences = async () => {
+            try {
+                const { data } = await api.get('/users/preferences');
+                if (data) {
+                    setTone(data.motivationTone || 'NEUTRAL');
+                    setNotificationFrequency(data.notificationFrequency || 60);
+                    setSleepStart(data.sleepStart || '23:00');
+                    setSleepEnd(data.sleepEnd || '07:00');
+                    // quietHours ignored for now
+                }
+            } catch (error) {
+                console.error("Failed to fetch preferences", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchPreferences();
+    }, []);
 
     const Toggle = ({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) => (
         <div
@@ -37,11 +58,11 @@ const SettingsPage: React.FC = () => {
         setIsSaving(true);
         try {
             await api.put('/users/preferences', {
-                motivationTone: tone.toUpperCase(),
+                motivationTone: tone,
                 notificationFrequency,
                 sleepStart,
                 sleepEnd,
-                quietHours: [] // Default empty for now, can add UI later
+                quietHours: []
             });
             // Show toast or success
             alert('Settings saved!');
@@ -52,6 +73,8 @@ const SettingsPage: React.FC = () => {
             setIsSaving(false);
         }
     };
+
+    if (isLoading) return <PageLoader />;
 
     return (
         <PageTransition>
@@ -71,19 +94,20 @@ const SettingsPage: React.FC = () => {
                             </div>
                         </div>
                         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                            {['Friendly', 'Stoic', 'Harsh', 'Positive', 'Fear'].map((t) => (
+                            {['NEUTRAL', 'LOGICAL', 'HARSH', 'POSITIVE', 'OPTIMISTIC', 'FEAR'].map((t) => (
                                 <button
                                     key={t}
-                                    onClick={() => setTone(t.toLowerCase() as any)}
+                                    onClick={() => setTone(t as any)}
                                     style={{
                                         flex: 1, padding: '12px', borderRadius: '8px',
-                                        border: `1px solid ${tone === t.toLowerCase() ? 'var(--color-accent)' : 'rgba(255,255,255,0.1)'}`,
-                                        background: tone === t.toLowerCase() ? 'rgba(0, 242, 234, 0.1)' : 'transparent',
-                                        color: tone === t.toLowerCase() ? 'var(--color-accent)' : 'var(--color-text-secondary)',
-                                        cursor: 'pointer', transition: 'all 0.3s'
+                                        border: `1px solid ${tone === t ? 'var(--color-accent)' : 'rgba(255,255,255,0.1)'}`,
+                                        background: tone === t ? 'rgba(0, 242, 234, 0.1)' : 'transparent',
+                                        color: tone === t ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+                                        cursor: 'pointer', transition: 'all 0.3s',
+                                        textTransform: 'capitalize'
                                     }}
                                 >
-                                    {t}
+                                    {t.toLowerCase()}
                                 </button>
                             ))}
                         </div>
