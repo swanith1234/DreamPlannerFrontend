@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     RiArrowLeftLine, RiTimeLine, RiCheckboxCircleLine,
-    RiCheckboxBlankCircleLine, RiEditLine, RiDeleteBinLine,
+    RiEditLine, RiDeleteBinLine,
     RiCheckDoubleLine
 } from 'react-icons/ri';
 import api from '../api/client';
