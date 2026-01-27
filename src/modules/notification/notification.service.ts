@@ -5,6 +5,7 @@ import { notificationScheduler, ScheduledNotification } from './notification.sch
 import { User, Task, NotificationStatus } from '@prisma/client';
 
 
+import { eventService } from '../event/event.service';
 
 export class NotificationService {
   /**
@@ -26,6 +27,7 @@ export class NotificationService {
           message: notification.message,
           scheduledAt: notification.scheduledAt,
           status: NotificationStatus.SCHEDULED,
+          metadata: notification.metadata,
         },
       });
 
@@ -284,15 +286,131 @@ export class NotificationService {
     }
   }
 
-  /**
-   * List user's recent notifications
-   */
-  async listNotifications(userId: string, limit: number = 50): Promise<any[]> {
+  async listNotifications(userId: string, limit: number = 50, skip: number = 0): Promise<any[]> {
     return prisma.notification.findMany({
-      where: { userId },
+      where: {
+        userId,
+        status: NotificationStatus.SENT,
+      },
       orderBy: { scheduledAt: 'desc' },
       take: limit,
+      skip: skip,
     });
+  }
+
+  /**
+   * Check for daily progress prompts (Evening Routine)
+   * Called by cron
+   */
+  async checkDailyProgress(): Promise<void> {
+    try {
+      const now = new Date();
+
+      // Find users with active tasks
+      const users = await prisma.user.findMany({
+        where: {
+          tasks: {
+            some: {
+              status: { in: ['PENDING', 'IN_PROGRESS'] },
+            },
+          },
+        },
+        include: {
+          preferences: true,
+          tasks: {
+            where: { status: { in: ['PENDING', 'IN_PROGRESS'] } },
+            include: { checkpoints: true },
+          },
+        },
+      });
+
+      for (const user of users) {
+        if (!user.preferences) continue;
+        const timezone = user.timezone || 'UTC';
+        const userTime = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
+        const currentHour = userTime.getHours();
+
+        // 1. Check Time Window (Evening > 18:00)
+        // Avoid night (e.g. > 22:00) if we want? User said "Evening window (e.g., after 6 PM)".
+        // Let's say 18:00 - 22:00.
+        if (currentHour < 18 || currentHour > 22) continue;
+
+        // Check if we already asked TODAY
+        const startOfUserDay = new Date(userTime);
+        startOfUserDay.setHours(0, 0, 0, 0); // Local midnight
+        // We need to query notifications sent/created today relative to UTC, but logic is "responded today".
+        // Actually, check if we Created a PROGRESS_CHECK notification today
+        // Approximate by checking UTC time range for simplicity or just check last notification type.
+
+        const existingPrompt = await prisma.notification.findFirst({
+          where: {
+            userId: user.id,
+            type: 'PROGRESS_CHECK',
+            createdAt: { gte: new Date(Date.now() - 12 * 60 * 60 * 1000) }, // Roughly last 12-24 hrs?
+            // Better: gte Today's start in UTC? 
+            // Let's just use "created within last 18 hours" to cover "today".
+          },
+        });
+
+        if (existingPrompt) continue;
+
+        for (const task of user.tasks) {
+          // 2. Check for Checkpoint due TODAY (Local Time)
+          const dueCheckpoint = task.checkpoints.find(cp => {
+            const cpDate = new Date(cp.targetDate); // UTC
+            // Compare cpDate (UTC) converted to User Date vs User Today
+            // Checkpoints usually stored as Date objects (UTC). 
+            // If targetDate is "2023-10-27T00:00:00Z", does that mean local?
+            // Usually we treat dates as local dates stored in UTC (Target Date = Midnight UTC).
+            // Let's assume strict date matching.
+            const cpLocal = new Date(cpDate.toLocaleString('en-US', { timeZone: timezone }));
+            return (
+              cpLocal.getDate() === userTime.getDate() &&
+              cpLocal.getMonth() === userTime.getMonth() &&
+              cpLocal.getFullYear() === userTime.getFullYear() &&
+              !cp.isCompleted
+            );
+          });
+
+          if (!dueCheckpoint) continue;
+
+          // 3. Check lastProgressAt
+          if (task.lastProgressAt) {
+            const lastProgressLocal = new Date(task.lastProgressAt.toLocaleString('en-US', { timeZone: timezone }));
+            if (
+              lastProgressLocal.getDate() === userTime.getDate() &&
+              lastProgressLocal.getMonth() === userTime.getMonth() &&
+              lastProgressLocal.getFullYear() === userTime.getFullYear()
+            ) {
+              // updated today
+              continue;
+            }
+          }
+
+          // CONDITIONS MET -> Send Notification
+          await this.createNotification(user.id, task.dreamId, task.id, {
+            scheduledAt: now, // Send immediately (Just-in-Time)
+            message: "Just checking in — how did today's plan go? You can share progress if you want, or continue tomorrow.",
+            type: 'PROGRESS_CHECK' as any, // Cast to avoid type error if strictly typed elsewhere
+            metadata: {
+              taskId: task.id,
+              progress: task.progressPercent || 0,
+              actions: [
+                { label: 'Update Progress', action: 'UPDATE_PROGRESS', value: 'slider' },
+                { label: 'Skip for today', action: 'SKIP_TODAY' }
+              ]
+            }
+          });
+
+          // Only send ONE progress check per evening (even if multiple tasks)
+          // to avoid spamming.
+          break;
+        }
+      }
+
+    } catch (error: any) {
+      await logger.error('notification', 'Failed to check daily progress', { error: error.message });
+    }
   }
 }
 

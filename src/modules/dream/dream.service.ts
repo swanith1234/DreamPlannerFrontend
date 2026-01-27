@@ -11,6 +11,46 @@ import { DreamStatus } from '@prisma/client';
 import { eventService } from '../event/event.service';
 
 export class DreamService {
+  async updateDream(
+    dreamId: string,
+    userId: string,
+    input: Partial<CreateDreamRequest>
+  ): Promise<any> {
+    const dream = await this.getDream(dreamId, userId);
+
+    const updateData: any = {};
+    if (input.title) updateData.title = input.title;
+    if (input.description) updateData.description = input.description;
+    if (input.motivationStatement) updateData.motivationStatement = input.motivationStatement;
+    if (input.deadline) {
+      const deadline = new Date(input.deadline);
+      if (deadline <= new Date()) {
+        throw new ValidationError('Deadline must be in the future');
+      }
+      updateData.deadline = deadline;
+    }
+
+    const updated = await prisma.dream.update({
+      where: { id: dreamId },
+      data: updateData,
+    });
+
+    await logger.info('dream', 'Dream updated', { dreamId }, userId);
+    return updated;
+  }
+
+  async archiveDream(dreamId: string, userId: string): Promise<any> {
+    const dream = await this.getDream(dreamId, userId);
+
+    const updated = await prisma.dream.update({
+      where: { id: dreamId },
+      data: { status: DreamStatus.ARCHIVED },
+    });
+
+    await logger.info('dream', 'Dream archived', { dreamId }, userId);
+    return updated;
+  }
+
   async createDraft(
     userId: string,
     input: CreateDreamRequest

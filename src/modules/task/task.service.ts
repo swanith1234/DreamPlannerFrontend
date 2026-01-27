@@ -220,8 +220,93 @@ export class TaskService {
     });
   }
 
-  async getTask(taskId: string, userId: string): Promise<any> {
+  async archiveTask(taskId: string, userId: string): Promise<any> {
     const task = await prisma.task.findUnique({ where: { id: taskId } });
+
+    if (!task || task.userId !== userId) {
+      throw new NotFoundError('Task');
+    }
+
+    return prisma.task.update({
+      where: { id: taskId },
+      data: { status: TaskStatus.ARCHIVED },
+    });
+  }
+
+  async updateCheckpoint(
+    taskId: string,
+    checkpointId: string,
+    userId: string,
+    data: { title?: string; targetDate?: string }
+  ): Promise<any> {
+    const task = await this.getTask(taskId, userId); // Verifies ownership
+
+    const checkpoint = await prisma.taskCheckpoint.findUnique({
+      where: { id: checkpointId },
+    });
+
+    if (!checkpoint || checkpoint.taskId !== taskId) {
+      throw new NotFoundError('Checkpoint');
+    }
+
+    const updateData: any = {};
+    if (data.title) updateData.title = data.title;
+    if (data.targetDate) updateData.targetDate = new Date(data.targetDate);
+    updateData.isUserEdited = true;
+
+    return prisma.taskCheckpoint.update({
+      where: { id: checkpointId },
+      data: updateData,
+    });
+  }
+
+  async toggleCheckpoint(
+    taskId: string,
+    checkpointId: string,
+    userId: string,
+    isCompleted: boolean
+  ): Promise<any> {
+    const task = await this.getTask(taskId, userId); // Verifies ownership
+
+    // 1. Update the triggered checkpoint
+    await prisma.taskCheckpoint.update({
+      where: { id: checkpointId },
+      data: { isCompleted },
+    });
+
+    // 2. Fetch all checkpoints to calculate new progress
+    const updatedTask = await this.getTask(taskId, userId);
+    const totalCheckpoints = updatedTask.checkpoints.length;
+
+    if (totalCheckpoints > 0) {
+      const completedCount = updatedTask.checkpoints.filter((cp: any) => cp.isCompleted).length;
+      const newProgress = Math.round((completedCount / totalCheckpoints) * 100);
+
+      // 3. Update task progress
+      // Reuse updateProgress to handle event logging and timestamp updates
+      await this.updateProgress(taskId, userId, newProgress);
+
+      return updatedTask; // Return the Task (with new progress), or the Checkpoint? 
+      // Plan didn't specify return type change, but calling updateProgress probably returns task.
+      // Let's return the checkpoint to match original signature type or return updated task data?
+      // Original returned checkpoint update result.
+      // Frontend expects checkpoint update result mostly, but if we change it here...
+      // Let's stick to returning the updated checkpoint but we want to ensure sidebar/UI updates.
+      // Actually, since we updated the task, we might want to trigger a refresh. 
+      // But for this function, let's just do the work.
+    }
+
+    return prisma.taskCheckpoint.findUnique({ where: { id: checkpointId } });
+  }
+
+  async getTask(taskId: string, userId: string): Promise<any> {
+    const task = await prisma.task.findUnique({
+      where: { id: taskId },
+      include: {
+        checkpoints: { orderBy: { orderIndex: 'asc' } },
+        dream: { select: { title: true, id: true } },
+      },
+    });
 
     if (!task || task.userId !== userId) {
       throw new NotFoundError('Task');

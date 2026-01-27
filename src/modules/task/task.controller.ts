@@ -61,6 +61,47 @@ export class TaskController {
     }
   }
 
+  async archive(req: AuthRequest, res: Response) {
+    try {
+      const { taskId } = req.params;
+      const task = await taskService.archiveTask(taskId, req.userId!);
+      res.status(200).json(task);
+    } catch (error: any) {
+      res.status(error.statusCode || 500).json({ error: error.message });
+    }
+  }
+
+  async updateCheckpoint(req: AuthRequest, res: Response) {
+    try {
+      const { taskId, checkpointId } = req.params;
+      const result = await taskService.updateCheckpoint(
+        taskId,
+        checkpointId,
+        req.userId!,
+        req.body
+      );
+      res.status(200).json(result);
+    } catch (error: any) {
+      res.status(error.statusCode || 500).json({ error: error.message });
+    }
+  }
+
+  async toggleCheckpoint(req: AuthRequest, res: Response) {
+    try {
+      const { taskId, checkpointId } = req.params;
+      const { isCompleted } = req.body;
+      const result = await taskService.toggleCheckpoint(
+        taskId,
+        checkpointId,
+        req.userId!,
+        isCompleted
+      );
+      res.status(200).json(result);
+    } catch (error: any) {
+      res.status(error.statusCode || 500).json({ error: error.message });
+    }
+  }
+
   async get(req: AuthRequest, res: Response) {
     try {
       const { taskId } = req.params;

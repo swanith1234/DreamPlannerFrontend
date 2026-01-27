@@ -24,6 +24,18 @@ router.post('/:taskId/complete', (req: Request, res: Response, next: NextFunctio
   taskController.complete(req, res).catch(next);
 });
 
+router.delete('/:taskId', (req: Request, res: Response, next: NextFunction) => {
+  taskController.archive(req, res).catch(next);
+});
+
+router.put('/:taskId/checkpoints/:checkpointId', (req: Request, res: Response, next: NextFunction) => {
+  taskController.updateCheckpoint(req, res).catch(next);
+});
+
+router.post('/:taskId/checkpoints/:checkpointId/toggle', (req: Request, res: Response, next: NextFunction) => {
+  taskController.toggleCheckpoint(req, res).catch(next);
+});
+
 router.post('/:taskId/block', (req: Request, res: Response, next: NextFunction) => {
   taskController.block(req, res).catch(next);
 });

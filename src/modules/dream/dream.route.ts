@@ -21,6 +21,14 @@ router.get('/:dreamId', (req: Request, res: Response, next: NextFunction) => {
   dreamController.get(req, res).catch(next);
 });
 
+router.put('/:dreamId', (req: Request, res: Response, next: NextFunction) => {
+  dreamController.update(req, res).catch(next);
+});
+
+router.delete('/:dreamId', (req: Request, res: Response, next: NextFunction) => {
+  dreamController.archive(req, res).catch(next);
+});
+
 router.get('/', (req: Request, res: Response, next: NextFunction) => {
   dreamController.list(req, res).catch(next);
 });

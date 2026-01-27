@@ -9,7 +9,8 @@ import { logger } from '../../utils/logger';
 export interface ScheduledNotification {
   scheduledAt: Date;
   message: string;
-  type: 'REMINDER' | 'MOTIVATIONAL' | 'SYSTEM';
+  type: 'REMINDER' | 'MOTIVATIONAL' | 'SYSTEM' | 'PROGRESS_CHECK';
+  metadata?: any;
 }
 
 export class NotificationScheduler {

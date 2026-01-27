@@ -3,6 +3,8 @@ import { enqueueNotificationJob } from './queue';
 import { NotificationStatus } from '@prisma/client';
 import { logger } from '../../utils/logger';
 
+import { notificationService } from './notification.service';
+
 export async function runNotificationCron() {
   const now = new Date();
   let enqueued = 0;
@@ -33,6 +35,9 @@ export async function runNotificationCron() {
     await enqueueNotificationJob(notification.id, 0);
     enqueued++;
   }
+
+  // Check Schedule Progress Prompts
+  await notificationService.checkDailyProgress();
 
   await logger.info('cron', 'Notification cron executed', {
     scanned: dueNotifications.length,
