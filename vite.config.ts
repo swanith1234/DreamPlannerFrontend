@@ -9,6 +9,12 @@ export default defineConfig({
       '/api': {
         target: 'https://dreamplanner-lbm7.onrender.com',
         changeOrigin: true,
+        secure: false, // In case of SSL issues locally, usually fine
+      },
+      '/ws': {
+        target: 'wss://dreamplanner-lbm7.onrender.com',
+        ws: true,
+        changeOrigin: true,
       }
     }
   }

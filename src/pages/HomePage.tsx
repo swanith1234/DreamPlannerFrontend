@@ -6,12 +6,13 @@ import GlowButton from '../components/GlowButton';
 import PageTransition from '../components/PageTransition';
 import ThreeDLoader from '../components/ThreeDLoader';
 import { RiRefreshLine } from 'react-icons/ri';
+import { useWebSocket } from '../hooks/useWebSocket';
 
 interface Notification {
     id: string;
     message: string;
     type: string;
-    timestamp: string;
+    timestamp: string;  // or scheduledAt
     metadata?: {
         actions?: Array<{ label: string; action: string; value?: any }>;
         progress?: number;
@@ -26,6 +27,45 @@ const HomePage: React.FC = () => {
     const [hasMore, setHasMore] = useState(true);
     const bottomRef = useRef<HTMLDivElement>(null);
 
+    // Real-time Integration
+    const { lastMessage } = useWebSocket();
+
+    // Browser Notification Permission
+    useEffect(() => {
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+    }, []);
+
+    // Listen for WebSocket messages
+    useEffect(() => {
+        if (!lastMessage) return;
+
+        if (lastMessage.type === 'NOTIFICATION_NEW' && lastMessage.notification) {
+            const newNotif = lastMessage.notification;
+
+            // Normalize dates to strings if they aren't already
+            const normalized: Notification = {
+                ...newNotif,
+                timestamp: newNotif.scheduledAt || newNotif.timestamp || new Date().toISOString()
+            };
+
+            // Prepend new notification to UI
+            setNotifications(prev => [...prev, normalized]);
+
+            // Browser System Notification
+            if (document.hidden && Notification.permission === 'granted') {
+                new Notification('DreamPlanner', {
+                    body: normalized.message,
+                    icon: '../public/dreamPlannerFavicon.jpeg'
+                });
+            }
+
+            // Scroll to bottom to show new message
+            setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+        }
+    }, [lastMessage]);
+
     useEffect(() => {
         fetchNotifications(1);
     }, []);
@@ -39,13 +79,9 @@ const HomePage: React.FC = () => {
             if (newNotifs.length < 20) setHasMore(false);
 
             // Backend returns newest first. 
-            // For chat, we want oldest at top, newest at bottom.
-            // But pagination returns page 1 (newest 20), page 2 (older 20).
-            // So we need to reverse the chunk, but PREPEND if loading older pages?
-
-            // Wait, standard chat:
-            // Load Page 1 (Newest 20) -> Reverse -> Show at bottom.
-            // Load Page 2 (Next 20) -> Reverse -> Prepend to current list.
+            // For chat, we standardly want oldest -> newest.
+            // On page 1 load, we reverse to show chronological order ending at "now".
+            // Implementation detail: this logic assumes fetching backwards in time.
 
             const reversedChunk = [...newNotifs].reverse();
 
@@ -79,17 +115,14 @@ const HomePage: React.FC = () => {
             timestamp: new Date().toISOString()
         };
         setNotifications(prev => [...prev, userMsg]);
+        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
 
         try {
             // In a real app, you'd send this to backend. 
-            // For Phase 1, we might just refresh notifications or trigger a specific endpoint depending on action.
-            // Example: completing a task
             console.log(`Action: ${action}, Value: ${value}`);
 
-            // Simulate backend response after delay
-            setTimeout(() => {
-                fetchNotifications(1);
-            }, 1000);
+            // Simulate backend response trigger via WS eventually? 
+            // For Phase 1, we just optimism.
 
         } catch (error) {
             console.error("Action failed", error);
@@ -105,16 +138,18 @@ const HomePage: React.FC = () => {
             timestamp: new Date().toISOString()
         };
         setNotifications(prev => [...prev, userMsg]);
+        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
 
         try {
             await api.post(`/tasks/${taskId}/progress`, { value: newValue });
             await api.put(`/notifications/${notifId}`, {
                 status: 'SENT',
                 metadata: { ...userMsg.metadata, responded: true }
-            }); // Ideally mark interaction
+            });
 
-            // Refresh
-            setTimeout(() => fetchNotifications(1), 500);
+            // Note: We deliberately DON'T refresh notifications here because
+            // the chat should flow forward, and refreshing might duplicate or mess up the list order.
+            // But if needed, we could fetch simplified state.
         } catch (error) {
             console.error("Progress update failed", error);
         }
@@ -163,16 +198,12 @@ const HomePage: React.FC = () => {
                     <AnimatePresence>
                         {notifications.map((notif, index) => {
                             // Check if date header is needed
-                            // Note: notif uses 'timestamp' or 'scheduledAt' from backend?
-                            // Backend controller returns objects with 'scheduledAt'. 
-                            // If frontend interface expects 'timestamp', we should map it or use scheduledAt.
-                            // Let's check the API response or just use 'scheduledAt' if present, falling back to timestamp.
                             const dateStr = (notif as any).scheduledAt || notif.timestamp;
                             const header = formatDateHeader(dateStr);
                             const showHeader = header !== lastDateHeader;
                             if (showHeader) lastDateHeader = header;
-                            // **Issue**: Map iteration order and variable mutation. 
-                            // React renders might re-run this. Better to pre-process or just check previous item.
+
+                            // Better logic for headers in map
                             const prevNotif = notifications[index - 1];
                             const prevDateStr = prevNotif ? ((prevNotif as any).scheduledAt || prevNotif.timestamp) : null;
                             const currentHeader = formatDateHeader(dateStr);
@@ -226,11 +257,6 @@ const HomePage: React.FC = () => {
                                                                         defaultValue={currentProgress}
                                                                         style={{ width: '100%', accentColor: 'var(--color-accent)', marginBottom: '12px' }}
                                                                         onChange={(e) => {
-                                                                            // Update local visual state? 
-                                                                            // Ideally we need state for this slider value if we want live update label.
-                                                                            // For now, let's just capture on change or better, create a small sub-component if needed.
-                                                                            // But to keep it simple effectively:
-                                                                            // We can just put the button below.
                                                                             e.target.parentElement!.querySelector('.progress-val')!.textContent = e.target.value + '%';
                                                                         }}
                                                                     />
