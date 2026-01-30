@@ -31,11 +31,7 @@ const HomePage: React.FC = () => {
     const { lastMessage } = useWebSocket();
 
     // Browser Notification Permission
-    useEffect(() => {
-        if ('Notification' in window && Notification.permission === 'default') {
-            Notification.requestPermission();
-        }
-    }, []);
+    // Moved to AppShell for explicit user activation logic
 
     // Listen for WebSocket messages
     useEffect(() => {

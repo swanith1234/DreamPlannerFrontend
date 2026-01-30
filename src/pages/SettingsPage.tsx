@@ -34,7 +34,19 @@ const SettingsPage: React.FC = () => {
                 setIsLoading(false);
             }
         };
+
+        const checkPushStatus = async () => {
+            if ('serviceWorker' in navigator) {
+                const registration = await navigator.serviceWorker.ready;
+                const subscription = await registration.pushManager.getSubscription();
+                setNotifications(!!subscription);
+
+                // Double check with backend if really needed, but local subscription existence is a good proxy.
+                // Ideally we verify if the backend also has it.
+            }
+        }
         fetchPreferences();
+        checkPushStatus();
     }, []);
 
     const Toggle = ({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) => (
@@ -122,7 +134,52 @@ const SettingsPage: React.FC = () => {
                                 <p style={{ fontSize: '0.9rem', color: 'var(--color-text-secondary)' }}>Enable system nudges</p>
                             </div>
                         </div>
-                        <Toggle checked={notifications} onChange={setNotifications} />
+                        <Toggle
+                            checked={notifications}
+                            onChange={async (newState) => {
+                                setNotifications(newState);
+                                if (newState) {
+                                    // ENABLE: Request permission & Subscribe
+                                    if (!('Notification' in window)) return;
+                                    const permission = await Notification.requestPermission();
+                                    if (permission === 'granted') {
+                                        if ('serviceWorker' in navigator) {
+                                            const registration = await navigator.serviceWorker.ready;
+                                            const { data: { publicKey } } = await api.get('/notifications/vapid-key');
+
+                                            // Helper to convert key
+                                            const urlBase64ToUint8Array = (base64String: string) => {
+                                                const padding = '='.repeat((4 - base64String.length % 4) % 4);
+                                                const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+                                                const rawData = window.atob(base64);
+                                                const outputArray = new Uint8Array(rawData.length);
+                                                for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+                                                return outputArray;
+                                            }
+
+                                            const subscription = await registration.pushManager.subscribe({
+                                                userVisibleOnly: true,
+                                                applicationServerKey: urlBase64ToUint8Array(publicKey)
+                                            });
+
+                                            await api.post('/notifications/subscribe', subscription);
+                                        }
+                                    } else {
+                                        setNotifications(false); // Denied
+                                    }
+                                } else {
+                                    // DISABLE: Unsubscribe
+                                    if ('serviceWorker' in navigator) {
+                                        const registration = await navigator.serviceWorker.ready;
+                                        const subscription = await registration.pushManager.getSubscription();
+                                        if (subscription) {
+                                            await subscription.unsubscribe();
+                                            await api.post('/notifications/unsubscribe', { endpoint: subscription.endpoint });
+                                        }
+                                    }
+                                }
+                            }}
+                        />
                     </GlassCard>
 
                     {/* Schedule Section */}

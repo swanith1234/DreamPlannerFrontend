@@ -2,16 +2,16 @@ import axios from 'axios';
 
 const api = axios.create({
     baseURL: `${import.meta.env.VITE_API_URL}/api` || 'https://dreamplanner-lbm7.onrender.com/api',
+    withCredentials: true,
     headers: {
         'Content-Type': 'application/json',
     },
 });
+
 console.log("base url", import.meta.env.VITE_API_URL);
+
+// Request interceptor: No need to attach token manually (cookies handle it)
 api.interceptors.request.use((config) => {
-    const token = localStorage.getItem('accessToken');
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
     return config;
 });
 
@@ -24,21 +24,17 @@ api.interceptors.response.use(
             originalRequest._retry = true;
 
             try {
-                const refreshToken = localStorage.getItem('refreshToken');
-                if (!refreshToken) throw new Error('No refresh token');
+                // Refresh endpoint now uses cookies automatically
+                await axios.post(
+                    `${import.meta.env.VITE_API_URL || ''}/api/auth/refresh`,
+                    {},
+                    { withCredentials: true }
+                );
 
-                const { data } = await axios.post(`${import.meta.env.VITE_API_URL || ''}/api/auth/refresh`, {
-                    refreshToken
-                });
-
-                localStorage.setItem('accessToken', data.accessToken);
-                localStorage.setItem('refreshToken', data.refreshToken);
-
-                api.defaults.headers.common['Authorization'] = `Bearer ${data.accessToken}`;
+                // Retry original request
                 return api(originalRequest);
             } catch (refreshError) {
-                localStorage.removeItem('accessToken');
-                localStorage.removeItem('refreshToken');
+                // Refresh failed - redirect to login
                 if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
                     window.location.href = '/login';
                 }
