@@ -148,7 +148,15 @@ const SettingsPage: React.FC = () => {
                                         const permission = await Notification.requestPermission();
                                         if (permission === 'granted') {
                                             if ('serviceWorker' in navigator) {
-                                                const registration = await navigator.serviceWorker.ready;
+                                                // Ensure SW is registered
+                                                let registration = await navigator.serviceWorker.getRegistration();
+                                                if (!registration) {
+                                                    console.log("Registering new Service Worker...");
+                                                    registration = await navigator.serviceWorker.register('/sw.js');
+                                                }
+
+                                                // Wait for it to be active
+                                                await navigator.serviceWorker.ready;
 
                                                 // 1. Get VAPID Key
                                                 const { data } = await api.get('/notifications/vapid-key');
