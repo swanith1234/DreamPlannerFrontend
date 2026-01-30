@@ -137,46 +137,69 @@ const SettingsPage: React.FC = () => {
                         <Toggle
                             checked={notifications}
                             onChange={async (newState) => {
-                                setNotifications(newState);
-                                if (newState) {
-                                    // ENABLE: Request permission & Subscribe
-                                    if (!('Notification' in window)) return;
-                                    const permission = await Notification.requestPermission();
-                                    if (permission === 'granted') {
-                                        if ('serviceWorker' in navigator) {
-                                            const registration = await navigator.serviceWorker.ready;
-                                            const { data: { publicKey } } = await api.get('/notifications/vapid-key');
+                                try {
+                                    setNotifications(newState);
+                                    if (newState) {
+                                        // ENABLE: Request permission & Subscribe
+                                        if (!('Notification' in window)) {
+                                            alert("Notifications are not supported in this browser.");
+                                            return;
+                                        }
+                                        const permission = await Notification.requestPermission();
+                                        if (permission === 'granted') {
+                                            if ('serviceWorker' in navigator) {
+                                                const registration = await navigator.serviceWorker.ready;
 
-                                            // Helper to convert key
-                                            const urlBase64ToUint8Array = (base64String: string) => {
-                                                const padding = '='.repeat((4 - base64String.length % 4) % 4);
-                                                const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
-                                                const rawData = window.atob(base64);
-                                                const outputArray = new Uint8Array(rawData.length);
-                                                for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
-                                                return outputArray;
+                                                // 1. Get VAPID Key
+                                                const { data } = await api.get('/notifications/vapid-key');
+                                                if (!data || !data.publicKey) {
+                                                    throw new Error("Failed to get VAPID Key from server");
+                                                }
+                                                const { publicKey } = data;
+
+                                                // 2. Helper to convert key
+                                                const urlBase64ToUint8Array = (base64String: string) => {
+                                                    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+                                                    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+                                                    const rawData = window.atob(base64);
+                                                    const outputArray = new Uint8Array(rawData.length);
+                                                    for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+                                                    return outputArray;
+                                                }
+
+                                                // 3. Subscribe
+                                                console.log("Subscribing to push manager...");
+                                                const subscription = await registration.pushManager.subscribe({
+                                                    userVisibleOnly: true,
+                                                    applicationServerKey: urlBase64ToUint8Array(publicKey)
+                                                });
+
+                                                // 4. Send to Backend
+                                                console.log("Sending subscription to backend...", subscription);
+                                                await api.post('/notifications/subscribe', subscription);
+                                                alert("Notifications enabled successfully!");
+                                            } else {
+                                                alert("Service Worker not supported or not ready.");
                                             }
-
-                                            const subscription = await registration.pushManager.subscribe({
-                                                userVisibleOnly: true,
-                                                applicationServerKey: urlBase64ToUint8Array(publicKey)
-                                            });
-
-                                            await api.post('/notifications/subscribe', subscription);
+                                        } else {
+                                            setNotifications(false); // Denied
+                                            alert("Permission denied. Please enable notifications in your browser settings.");
                                         }
                                     } else {
-                                        setNotifications(false); // Denied
-                                    }
-                                } else {
-                                    // DISABLE: Unsubscribe
-                                    if ('serviceWorker' in navigator) {
-                                        const registration = await navigator.serviceWorker.ready;
-                                        const subscription = await registration.pushManager.getSubscription();
-                                        if (subscription) {
-                                            await subscription.unsubscribe();
-                                            await api.post('/notifications/unsubscribe', { endpoint: subscription.endpoint });
+                                        // DISABLE: Unsubscribe
+                                        if ('serviceWorker' in navigator) {
+                                            const registration = await navigator.serviceWorker.ready;
+                                            const subscription = await registration.pushManager.getSubscription();
+                                            if (subscription) {
+                                                await subscription.unsubscribe();
+                                                await api.post('/notifications/unsubscribe', { endpoint: subscription.endpoint });
+                                            }
                                         }
                                     }
+                                } catch (err: any) {
+                                    console.error("Notification toggle error:", err);
+                                    setNotifications(!newState); // Revert state
+                                    alert(`Failed to change notification settings: ${err.message}`);
                                 }
                             }}
                         />
