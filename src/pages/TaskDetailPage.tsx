@@ -18,6 +18,7 @@ interface TaskCheckpoint {
     title: string;
     targetDate: string;
     isCompleted: boolean;
+    progress: number;
     orderIndex: number;
 }
 
@@ -70,29 +71,33 @@ const TaskDetailPage: React.FC = () => {
         }
     };
 
-    const handleToggleCheckpoint = async (checkpointId: string, currentStatus: boolean) => {
+    const handleCycleProgress = async (checkpointId: string, currentProgress: number) => {
         try {
+            // Cycle: 0 -> 25 -> 50 -> 75 -> 100 -> 0
+            let nextProgress = currentProgress + 25;
+            if (nextProgress > 100) nextProgress = 0;
+
             // Optimistic update
             if (!task) return;
             const updatedCheckpoints = task.checkpoints.map(cp =>
-                cp.id === checkpointId ? { ...cp, isCompleted: !currentStatus } : cp
+                cp.id === checkpointId ? { ...cp, progress: nextProgress, isCompleted: nextProgress === 100 } : cp
             );
 
-            // Calculate new progress
-            const completedCount = updatedCheckpoints.filter(cp => cp.isCompleted).length;
-            const totalCount = updatedCheckpoints.length;
-            const newProgress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+            // Calculate new overall progress (Average of all checkpoints)
+            const totalProgressSum = updatedCheckpoints.reduce((sum, cp) => sum + (cp.progress || 0), 0);
+            const newTotalProgress = updatedCheckpoints.length > 0 ? Math.round(totalProgressSum / updatedCheckpoints.length) : 0;
 
-            setTask({ ...task, checkpoints: updatedCheckpoints, progressPercent: newProgress });
+            setTask({ ...task, checkpoints: updatedCheckpoints, progressPercent: newTotalProgress });
 
-            await api.post(`/tasks/${task.id}/checkpoints/${checkpointId}/toggle`, {
-                isCompleted: !currentStatus
+            // API Call
+            await api.post(`/tasks/${task.id}/checkpoints/${checkpointId}/progress`, {
+                progress: nextProgress
             });
 
-            // Also update main progress
-            await api.post(`/tasks/${task.id}/progress`, { value: newProgress });
+            // No need to call main progress API separately if backend handles it, 
+            // but Frontend optimistic update needs to show it immediately.
         } catch (error) {
-            console.error("Failed to toggle checkpoint", error);
+            console.error("Failed to cycle progress", error);
             fetchTask(); // Revert on error
         }
     };
@@ -239,19 +244,45 @@ const TaskDetailPage: React.FC = () => {
                                                 }} />
                                             )}
 
-                                            {/* Icon */}
+                                            {/* Circular Progress Icon */}
                                             <div
-                                                onClick={() => handleToggleCheckpoint(cp.id, cp.isCompleted)}
+                                                onClick={() => handleCycleProgress(cp.id, cp.progress || 0)}
                                                 style={{
                                                     zIndex: 2, cursor: 'pointer',
-                                                    width: '24px', height: '24px', borderRadius: '50%',
-                                                    background: cp.isCompleted ? '#4F46E5' : 'rgba(30,30,40,1)',
-                                                    border: `2px solid ${cp.isCompleted ? '#4F46E5' : isPast ? '#ff6b6b' : 'rgba(255,255,255,0.3)'}`,
+                                                    width: '32px', height: '32px', borderRadius: '50%',
+                                                    background: 'rgba(30,30,40,1)',
+                                                    position: 'relative',
                                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                     flexShrink: 0
                                                 }}
                                             >
-                                                {cp.isCompleted && <RiCheckboxCircleLine color="white" size={16} />}
+                                                {/* Background Track */}
+                                                <svg width="32" height="32" style={{ transform: 'rotate(-90deg)', position: 'absolute' }}>
+                                                    <circle
+                                                        cx="16" cy="16" r="14"
+                                                        stroke="rgba(255,255,255,0.1)" strokeWidth="3" fill="transparent"
+                                                    />
+                                                    {/* Progress Fill */}
+                                                    <motion.circle
+                                                        initial={false}
+                                                        animate={{ strokeDashoffset: 88 - (88 * (cp.progress || 0)) / 100 }}
+                                                        transition={{ duration: 0.3 }}
+                                                        cx="16" cy="16" r="14"
+                                                        stroke={cp.progress === 100 ? '#4CAF50' : '#4F46E5'}
+                                                        strokeWidth="3" fill="transparent"
+                                                        strokeDasharray="88" // 2 * PI * 14
+                                                        strokeLinecap="round"
+                                                    />
+                                                </svg>
+
+                                                {/* Center Text/Icon */}
+                                                <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'white', zIndex: 3 }}>
+                                                    {cp.progress === 100 ? (
+                                                        <RiCheckboxCircleLine color="#4CAF50" size={16} />
+                                                    ) : (
+                                                        cp.progress > 0 ? cp.progress : ''
+                                                    )}
+                                                </div>
                                             </div>
 
                                             {/* Content */}
