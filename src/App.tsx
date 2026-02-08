@@ -13,6 +13,7 @@ import DreamsPage from './pages/DreamsPage';
 import TasksPage from './pages/TasksPage';
 import TaskDetailPage from './pages/TaskDetailPage';
 import SettingsPage from './pages/SettingsPage';
+import DashboardPage from './pages/DashboardPage';
 
 
 // Protected Route Wrapper

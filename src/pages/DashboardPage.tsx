@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { analyticsApi, WeeklyInsightResponse } from '../api/analytics';
+import { analyticsApi } from '../api/analytics';
+import type { WeeklyInsightResponse } from '../api/analytics';
 import SimpleGauge from '../components/Analytics/SimpleGauge';
 import WeeklyInsight from '../components/Analytics/WeeklyInsight';
 import { motion } from 'framer-motion';
@@ -61,15 +62,15 @@ const DashboardPage: React.FC = () => {
                 gap: 'var(--spacing-lg)',
                 marginBottom: 'var(--spacing-xl)'
             }}>
-                <ScoreCard title="Discipline Score" value={snapshot.disciplineScore}>
+                <ScoreCard>
                     <SimpleGauge value={snapshot.disciplineScore} label="Discipline" size={140} />
                 </ScoreCard>
 
-                <ScoreCard title="Consistency" value={snapshot.consistencyScore}>
+                <ScoreCard>
                     <SimpleGauge value={snapshot.consistencyScore} label="Consistency" color="var(--color-gold)" size={140} />
                 </ScoreCard>
 
-                <ScoreCard title="Execution Rate" value={snapshot.executionRate || 0}>
+                <ScoreCard>
                     <SimpleGauge value={snapshot.executionRate || 0} label="Execution" color="var(--color-success)" size={140} />
                 </ScoreCard>
             </div>
@@ -92,7 +93,7 @@ const DashboardPage: React.FC = () => {
     );
 };
 
-const ScoreCard: React.FC<{ title: string; value: number; children: React.ReactNode }> = ({ title, value, children }) => (
+const ScoreCard: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     <motion.div
         whileHover={{ y: -5 }}
         style={{
