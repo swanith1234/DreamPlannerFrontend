@@ -43,6 +43,7 @@ const AnimatedRoutes: React.FC = () => {
           </ProtectedRoute>
         }>
           <Route path="home" element={<HomePage />} />
+          <Route path="dashboard" element={<DashboardPage />} />
           <Route path="dreams" element={<DreamsPage />} />
           <Route path="tasks" element={<TasksPage />} />
           <Route path="tasks/:taskId" element={<TaskDetailPage />} />
