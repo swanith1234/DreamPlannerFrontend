@@ -25,20 +25,18 @@ const DashboardPage: React.FC = () => {
 
     if (loading) return <div style={{ padding: 40, color: 'white' }}>Loading Analytics...</div>;
 
-    const snapshot = data?.snapshot;
+    const snapshot = data?.snapshot || {
+        weekStart: new Date().toISOString(),
+        disciplineScore: 0,
+        consistencyScore: 0,
+        executionRate: 0,
+        activeDays: 0,
+        totalCheckpointsCompleted: 0,
+        totalCheckpointsPlanned: 0,
+        lateCheckpoints: 0,
+        earlyStarts: 0
+    };
     const insight = data?.insight;
-
-    if (!snapshot) {
-        return (
-            <div style={{ padding: 40, color: 'white' }}>
-                <h2>No Analytics Available</h2>
-                <p>Complete some tasks to see your insights!</p>
-                <button onClick={() => analyticsApi.triggerGeneration().then(() => window.location.reload())}>
-                    Generate Now (Dev)
-                </button>
-            </div>
-        );
-    }
 
     return (
         <div style={{ padding: 'var(--spacing-lg)', maxWidth: '1200px', margin: '0 auto' }}>
