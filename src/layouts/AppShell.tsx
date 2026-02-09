@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     RiHome5Line,
     RiHome5Fill,
+    RiDashboardLine,
+    RiDashboardFill,
     RiMoonClearLine,
     RiMoonClearFill,
     RiCheckboxCircleLine,
@@ -87,6 +89,7 @@ const AppShell: React.FC = () => {
 
     const navItems = [
         { path: '/app/home', icon: RiHome5Line, activeIcon: RiHome5Fill, label: 'Home' },
+        { path: '/app/dashboard', icon: RiDashboardLine, activeIcon: RiDashboardFill, label: 'Dashboard' },
         { path: '/app/dreams', icon: RiMoonClearLine, activeIcon: RiMoonClearFill, label: 'Dreams' },
         { path: '/app/tasks', icon: RiCheckboxCircleLine, activeIcon: RiCheckboxCircleFill, label: 'Tasks' },
         { path: '/app/settings', icon: RiSettings4Line, activeIcon: RiSettings4Fill, label: 'Settings' },
