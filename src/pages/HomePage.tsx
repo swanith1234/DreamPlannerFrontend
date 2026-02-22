@@ -242,7 +242,7 @@ const HomePage: React.FC = () => {
                                                                             style={{ padding: '4px 12px', fontSize: '0.8rem' }}
                                                                             onClick={(e: any) => {
                                                                                 const val = parseInt(e.target.closest('div').parentElement.querySelector('input').value);
-                                                                                handleProgressUpdate(notif.id, notif.metadata!.taskId!, val);
+                                                                                handleProgressUpdate(notif.id, val);
                                                                             }}
                                                                         >
                                                                             Update
@@ -257,7 +257,7 @@ const HomePage: React.FC = () => {
                                                                 key={idx}
                                                                 variant="secondary"
                                                                 style={{ fontSize: '0.8rem', padding: '6px 12px' }}
-                                                                onClick={() => handleAction(action.action, action.value)}
+                                                                onClick={() => handleAction(action.action, notif.id)}
                                                             >
                                                                 {action.label}
                                                             </GlowButton>
