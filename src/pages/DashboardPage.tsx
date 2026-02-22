@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { motion, useAnimation, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { analyticsApi, type SprintDashboard } from '../api/analytics';
 import {
-    RiFireFill, RiTrophyFill, RiFlashlightFill, RiCheckboxCircleFill,
-    RiTimeFill, RiAlertFill, RiArrowUpLine, RiCalendarCheckFill,
-    RiStarFill, RiMedalFill
+    RiTrophyFill, RiFlashlightFill, RiCheckboxCircleFill,
+    RiAlertFill, RiArrowUpLine, RiCalendarCheckFill,
+
 } from 'react-icons/ri';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
