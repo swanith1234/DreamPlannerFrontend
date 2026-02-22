@@ -20,6 +20,7 @@ interface TaskCheckpoint {
     isCompleted: boolean;
     progress: number;
     orderIndex: number;
+    isActive: boolean;  // server-derived: true only for the first incomplete checkpoint
 }
 
 interface Task {
@@ -43,6 +44,15 @@ const TaskDetailPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
+    const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+
+    useEffect(() => {
+        const onResize = () => setWindowWidth(window.innerWidth);
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, []);
+
+    const isMobile = windowWidth < 768;
 
     // Edit Task State
     const [editTitle, setEditTitle] = useState('');
@@ -52,6 +62,7 @@ const TaskDetailPage: React.FC = () => {
     // Edit state
     const [editingCheckpoint, setEditingCheckpoint] = useState<string | null>(null);
     const [editValue, setEditValue] = useState('');
+    const [deletingCheckpointId, setDeletingCheckpointId] = useState<string | null>(null);
 
     useEffect(() => {
         fetchTask();
@@ -71,33 +82,37 @@ const TaskDetailPage: React.FC = () => {
         }
     };
 
-    const handleCycleProgress = async (checkpointId: string, currentProgress: number) => {
-        try {
-            // Cycle: 0 -> 25 -> 50 -> 75 -> 100 -> 0
-            let nextProgress = currentProgress + 25;
-            if (nextProgress > 100) nextProgress = 0;
+    const handleCycleProgress = async (cp: TaskCheckpoint) => {
+        // Guard: only the active checkpoint (server-derived) can be updated
+        if (!cp.isActive) return;
 
+        try {
+            // Forward-only: progress increases by 25. Capped at 100.
+            const newProgress = Math.min(cp.progress + 25, 100);
+            const delta = newProgress - cp.progress; // always positive
+
+            // Capture user's local calendar date (browser timezone) to send to the server.
+            // This prevents server-timezone mismatch (e.g. server in UTC, user in IST).
+            const now = new Date();
+            const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
             // Optimistic update
             if (!task) return;
-            const updatedCheckpoints = task.checkpoints.map(cp =>
-                cp.id === checkpointId ? { ...cp, progress: nextProgress, isCompleted: nextProgress === 100 } : cp
+            const updatedCheckpoints = task.checkpoints.map(c =>
+                c.id === cp.id
+                    ? { ...c, progress: newProgress, isCompleted: newProgress === 100, isActive: newProgress < 100 }
+                    : c
             );
-
-            // Calculate new overall progress (Average of all checkpoints)
-            const totalProgressSum = updatedCheckpoints.reduce((sum, cp) => sum + (cp.progress || 0), 0);
+            const totalProgressSum = updatedCheckpoints.reduce((sum, c) => sum + Math.min(c.progress || 0, 100), 0);
             const newTotalProgress = updatedCheckpoints.length > 0 ? Math.round(totalProgressSum / updatedCheckpoints.length) : 0;
-
             setTask({ ...task, checkpoints: updatedCheckpoints, progressPercent: newTotalProgress });
 
-            // API Call
-            await api.post(`/tasks/${task.id}/checkpoints/${checkpointId}/progress`, {
-                progress: nextProgress
-            });
+            // API: send DELTA + localDate, not absolute
+            await api.post(`/tasks/${task.id}/checkpoints/${cp.id}/progress`, { delta, localDate });
 
-            // No need to call main progress API separately if backend handles it, 
-            // but Frontend optimistic update needs to show it immediately.
+            // Refresh to get server-side state (next checkpoint now ACTIVE, etc.)
+            fetchTask();
         } catch (error) {
-            console.error("Failed to cycle progress", error);
+            console.error('Failed to update progress', error);
             fetchTask(); // Revert on error
         }
     };
@@ -120,6 +135,17 @@ const TaskDetailPage: React.FC = () => {
             navigate('/app/tasks');
         } catch (error) {
             console.error("Failed to delete task", error);
+        }
+    };
+
+    const handleDeleteCheckpoint = async () => {
+        if (!deletingCheckpointId || !task) return;
+        try {
+            await api.delete(`/tasks/${task.id}/checkpoints/${deletingCheckpointId}`);
+            setDeletingCheckpointId(null);
+            fetchTask();
+        } catch (error) {
+            console.error('Failed to delete checkpoint', error);
         }
     };
 
@@ -164,7 +190,7 @@ const TaskDetailPage: React.FC = () => {
                     <RiArrowLeftLine /> Back to Missions
                 </button>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '32px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 350px', gap: '32px' }}>
 
                     {/* Left Column: Details & Timeline */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
@@ -245,45 +271,56 @@ const TaskDetailPage: React.FC = () => {
                                             )}
 
                                             {/* Circular Progress Icon */}
-                                            <div
-                                                onClick={() => handleCycleProgress(cp.id, cp.progress || 0)}
-                                                style={{
-                                                    zIndex: 2, cursor: 'pointer',
-                                                    width: '32px', height: '32px', borderRadius: '50%',
-                                                    background: 'rgba(30,30,40,1)',
-                                                    position: 'relative',
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                    flexShrink: 0
-                                                }}
-                                            >
-                                                {/* Background Track */}
-                                                <svg width="32" height="32" style={{ transform: 'rotate(-90deg)', position: 'absolute' }}>
-                                                    <circle
-                                                        cx="16" cy="16" r="14"
-                                                        stroke="rgba(255,255,255,0.1)" strokeWidth="3" fill="transparent"
-                                                    />
-                                                    {/* Progress Fill */}
-                                                    <motion.circle
-                                                        initial={false}
-                                                        animate={{ strokeDashoffset: 88 - (88 * (cp.progress || 0)) / 100 }}
-                                                        transition={{ duration: 0.3 }}
-                                                        cx="16" cy="16" r="14"
-                                                        stroke={cp.progress === 100 ? '#4CAF50' : '#4F46E5'}
-                                                        strokeWidth="3" fill="transparent"
-                                                        strokeDasharray="88" // 2 * PI * 14
-                                                        strokeLinecap="round"
-                                                    />
-                                                </svg>
-
-                                                {/* Center Text/Icon */}
-                                                <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'white', zIndex: 3 }}>
-                                                    {cp.progress === 100 ? (
-                                                        <RiCheckboxCircleLine color="#4CAF50" size={16} />
-                                                    ) : (
-                                                        cp.progress > 0 ? cp.progress : ''
-                                                    )}
-                                                </div>
-                                            </div>
+                                            {(() => {
+                                                const isActive = cp.isActive;
+                                                const isDone = cp.isCompleted;
+                                                const isLocked = !isDone && !isActive;
+                                                return (
+                                                    <div
+                                                        onClick={isActive ? () => handleCycleProgress(cp) : undefined}
+                                                        title={isLocked ? 'Complete the current active checkpoint first' : undefined}
+                                                        style={{
+                                                            zIndex: 2,
+                                                            cursor: isActive ? 'pointer' : isDone ? 'default' : 'not-allowed',
+                                                            opacity: isLocked ? 0.35 : 1,
+                                                            filter: isLocked ? 'grayscale(0.7)' : 'none',
+                                                            width: '32px', height: '32px', borderRadius: '50%',
+                                                            background: 'rgba(30,30,40,1)',
+                                                            position: 'relative',
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                            flexShrink: 0,
+                                                            transition: 'opacity 0.2s, filter 0.2s',
+                                                        }}
+                                                    >
+                                                        {/* Background Track */}
+                                                        <svg width="32" height="32" style={{ transform: 'rotate(-90deg)', position: 'absolute' }}>
+                                                            <circle
+                                                                cx="16" cy="16" r="14"
+                                                                stroke="rgba(255,255,255,0.1)" strokeWidth="3" fill="transparent"
+                                                            />
+                                                            {/* Progress Fill */}
+                                                            <motion.circle
+                                                                initial={false}
+                                                                animate={{ strokeDashoffset: 88 - (88 * (cp.progress || 0)) / 100 }}
+                                                                transition={{ duration: 0.3 }}
+                                                                cx="16" cy="16" r="14"
+                                                                stroke={cp.progress === 100 ? '#4CAF50' : isActive ? '#4F46E5' : '#888'}
+                                                                strokeWidth="3" fill="transparent"
+                                                                strokeDasharray="88"
+                                                                strokeLinecap="round"
+                                                            />
+                                                        </svg>
+                                                        {/* Center Text/Icon */}
+                                                        <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'white', zIndex: 3 }}>
+                                                            {cp.progress === 100 ? (
+                                                                <RiCheckboxCircleLine color="#4CAF50" size={16} />
+                                                            ) : (
+                                                                cp.progress > 0 ? `${cp.progress}%` : isLocked ? '🔒' : ''
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
 
                                             {/* Content */}
                                             <div style={{ flex: 1, marginTop: '-2px' }}>
@@ -317,8 +354,28 @@ const TaskDetailPage: React.FC = () => {
                                                         </div>
                                                     )}
 
-                                                    <div style={{ fontSize: '0.85rem', color: cp.isCompleted ? 'rgba(255,255,255,0.3)' : (isPast ? '#ff6b6b' : 'var(--color-text-secondary)') }}>
-                                                        {new Date(cp.targetDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                        <div
+                                                            style={{
+                                                                fontSize: '0.85rem',
+                                                                color: cp.isCompleted ? 'rgba(255,255,255,0.3)' : (isPast ? '#ff6b6b' : 'var(--color-text-secondary)')
+                                                            }}
+                                                        >
+                                                            {new Date(cp.targetDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                                        </div>
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); setDeletingCheckpointId(cp.id); }}
+                                                            title="Delete checkpoint"
+                                                            style={{
+                                                                background: 'rgba(255,50,50,0.08)',
+                                                                border: 'none', color: '#ff6b6b',
+                                                                padding: '3px 6px', borderRadius: '4px',
+                                                                cursor: 'pointer', fontSize: '0.75rem', lineHeight: 1,
+                                                                display: 'flex', alignItems: 'center'
+                                                            }}
+                                                        >
+                                                            <RiDeleteBinLine size={12} />
+                                                        </button>
                                                     </div>
                                                 </div>
                                             </div>
@@ -411,6 +468,48 @@ const TaskDetailPage: React.FC = () => {
                                         }}
                                     >
                                         Delete
+                                    </button>
+                                </div>
+                            </GlassCard>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* Checkpoint Delete Confirmation Modal */}
+                <AnimatePresence>
+                    {deletingCheckpointId && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            style={{
+                                position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+                                background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', zIndex: 1000,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'
+                            }}
+                            onClick={() => setDeletingCheckpointId(null)}
+                        >
+                            <GlassCard
+                                style={{ width: '100%', maxWidth: '400px', padding: '32px', textAlign: 'center' }}
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <h3 style={{ marginBottom: '16px' }}>Delete Checkpoint?</h3>
+                                <p style={{ color: 'var(--color-text-secondary)', marginBottom: '8px' }}>
+                                    This will permanently delete this checkpoint and all its daily progress entries from the Day table.
+                                </p>
+                                <p style={{ fontSize: '0.8rem', color: '#ff6b6b', marginBottom: '24px' }}>
+                                    ⚠️ This action cannot be undone.
+                                </p>
+                                <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
+                                    <GlowButton variant="ghost" onClick={() => setDeletingCheckpointId(null)}>Cancel</GlowButton>
+                                    <button
+                                        onClick={handleDeleteCheckpoint}
+                                        style={{
+                                            background: '#ff6b6b', color: 'white', border: 'none',
+                                            padding: '10px 24px', borderRadius: '8px', fontWeight: 600, cursor: 'pointer'
+                                        }}
+                                    >
+                                        Delete Checkpoint
                                     </button>
                                 </div>
                             </GlassCard>

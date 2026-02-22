@@ -102,11 +102,11 @@ const HomePage: React.FC = () => {
         }
     };
 
-    const handleAction = async (action: string, value?: any) => {
-        // Optimistic UI: Add user response bubble
+    const handleAction = async (action: string, notifId: string) => {
+        // Optimistic: show user response bubble
         const userMsg: Notification = {
             id: Date.now().toString(),
-            message: getActionLabel(action, value),
+            message: action === 'SKIP_TODAY' ? 'Skipped for today 👍' : action,
             type: 'USER_ACTION',
             timestamp: new Date().toISOString()
         };
@@ -114,22 +114,16 @@ const HomePage: React.FC = () => {
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
 
         try {
-            // In a real app, you'd send this to backend. 
-            console.log(`Action: ${action}, Value: ${value}`);
-
-            // Simulate backend response trigger via WS eventually? 
-            // For Phase 1, we just optimism.
-
+            await api.post(`/notifications/${notifId}/respond`, { action });
         } catch (error) {
-            console.error("Action failed", error);
+            console.error('Action failed', error);
         }
     };
 
-    const handleProgressUpdate = async (notifId: string, taskId: string, newValue: number) => {
-        // Optimistic UI
+    const handleProgressUpdate = async (notifId: string, newValue: number) => {
         const userMsg: Notification = {
             id: Date.now().toString(),
-            message: `Updated progress to ${newValue}%`,
+            message: `Progress updated to ${newValue}% 💪`,
             type: 'USER_ACTION',
             timestamp: new Date().toISOString()
         };
@@ -137,25 +131,12 @@ const HomePage: React.FC = () => {
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
 
         try {
-            await api.post(`/tasks/${taskId}/progress`, { value: newValue });
-            await api.put(`/notifications/${notifId}`, {
-                status: 'SENT',
-                metadata: { ...userMsg.metadata, responded: true }
-            });
-
-            // Note: We deliberately DON'T refresh notifications here because
-            // the chat should flow forward, and refreshing might duplicate or mess up the list order.
-            // But if needed, we could fetch simplified state.
+            await api.post(`/notifications/${notifId}/respond`, { action: 'PROGRESS_UPDATED', value: newValue });
         } catch (error) {
-            console.error("Progress update failed", error);
+            console.error('Progress update failed', error);
         }
     };
 
-    const getActionLabel = (action: string, value: any) => {
-        // Helper to format user's "response" text
-        if (value) return `${action}: ${value}%`;
-        return action;
-    }
 
     const formatDateHeader = (isoString: string) => {
         if (!isoString) return 'Unknown Date';

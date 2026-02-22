@@ -1,7 +1,11 @@
 import axios from 'axios';
 
+// In production, VITE_API_URL is set to the Render backend URL (via Vercel env vars).
+// Locally, it's empty — we rely on Vite's dev server proxy (/api -> http://localhost:3000).
+const BASE_URL = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
+
 const api = axios.create({
-    baseURL: `${import.meta.env.VITE_API_URL}/api` || 'https://dreamplanner-lbm7.onrender.com/api',
+    baseURL: BASE_URL,
     withCredentials: true,
     headers: {
         'Content-Type': 'application/json',
@@ -26,7 +30,7 @@ api.interceptors.response.use(
             try {
                 // Refresh endpoint now uses cookies automatically
                 await axios.post(
-                    `${import.meta.env.VITE_API_URL || ''}/api/auth/refresh`,
+                    `${BASE_URL}/auth/refresh`,
                     {},
                     { withCredentials: true }
                 );

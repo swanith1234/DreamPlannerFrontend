@@ -7,12 +7,12 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://dreamplanner-lbm7.onrender.com',
+        target: 'http://localhost:3000',
         changeOrigin: true,
-        secure: false, // In case of SSL issues locally, usually fine
+        secure: false,
       },
       '/ws': {
-        target: 'wss://dreamplanner-lbm7.onrender.com',
+        target: 'ws://localhost:3000',
         ws: true,
         changeOrigin: true,
       }
