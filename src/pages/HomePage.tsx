@@ -120,7 +120,7 @@ const HomePage: React.FC = () => {
         }
     };
 
-    const handleProgressUpdate = async (notifId: string, p0: string, newValue: number) => {
+    const handleProgressUpdate = async (notifId: string, newValue: number) => {
         const userMsg: Notification = {
             id: Date.now().toString(),
             message: `Progress updated to ${newValue}% 💪`,
