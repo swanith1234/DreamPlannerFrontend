@@ -19,27 +19,39 @@ api.interceptors.request.use((config) => {
     return config;
 });
 
+let isRefreshing = false;
+
 api.interceptors.response.use(
     (response) => response,
     async (error) => {
         const originalRequest = error.config;
+        const url: string = originalRequest?.url || '';
 
-        if (error.response?.status === 401 && !originalRequest._retry) {
+        // Only skip refresh for endpoints that would cause infinite loops if retried
+        const isRefreshEndpoint = url.includes('/auth/refresh');
+        const isLoginEndpoint = url.includes('/auth/login') || url.includes('/auth/signup');
+
+        if (error.response?.status === 401 && !originalRequest._retry && !isRefreshEndpoint && !isLoginEndpoint) {
+            if (isRefreshing) return Promise.reject(error);
+
             originalRequest._retry = true;
+            isRefreshing = true;
 
             try {
-                // Refresh endpoint now uses cookies automatically
                 await axios.post(
                     `${BASE_URL}/auth/refresh`,
                     {},
                     { withCredentials: true }
                 );
-
-                // Retry original request
+                isRefreshing = false;
+                // Retry the original request (including /auth/me) with the new access token cookie
                 return api(originalRequest);
             } catch (refreshError) {
-                // Refresh failed - redirect to login
-                if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
+                isRefreshing = false;
+                // If the original request was /auth/me, this is just "not logged in" — AuthContext
+                // handles it gracefully (sets user=null). No hard redirect needed.
+                const isMeCheck = url.includes('/auth/me');
+                if (!isMeCheck && window.location.pathname !== '/login' && window.location.pathname !== '/') {
                     window.location.href = '/login';
                 }
             }
