@@ -14,8 +14,9 @@ const SettingsPage: React.FC = () => {
     const [sleepStart, setSleepStart] = useState('23:00');
     const [sleepEnd, setSleepEnd] = useState('07:00');
     const [notificationFrequency, setNotificationFrequency] = useState(60);
+    const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
     const [isSaving, setIsSaving] = useState(false);
-    const [isLoading, setIsLoading] = useState(true); // Initial load state
+    const [isLoading, setIsLoading] = useState(true);
 
     React.useEffect(() => {
         const fetchPreferences = async () => {
@@ -26,8 +27,20 @@ const SettingsPage: React.FC = () => {
                     setNotificationFrequency(data.notificationFrequency || 60);
                     setSleepStart(data.sleepStart || '23:00');
                     setSleepEnd(data.sleepEnd || '07:00');
-                    // quietHours ignored for now
                 }
+                // Separately fetch user profile for timezone
+                try {
+                    const { data: me } = await api.get('/auth/me');
+                    const storedTz = me?.user?.timezone;
+                    const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                    if (!storedTz || storedTz === 'UTC') {
+                        // Auto-fix: patch the backend with the correct timezone
+                        await api.put('/users/profile', { timezone: browserTz });
+                        setTimezone(browserTz);
+                    } else {
+                        setTimezone(storedTz);
+                    }
+                } catch { /* profile fetch failed, keep browser default */ }
             } catch (error) {
                 console.error("Failed to fetch preferences", error);
             } finally {
@@ -76,7 +89,8 @@ const SettingsPage: React.FC = () => {
                 sleepEnd,
                 quietHours: []
             });
-            // Show toast or success
+            // Also save timezone
+            await api.put('/users/profile', { timezone });
             alert('Settings saved!');
         } catch (error) {
             console.error('Failed to save settings', error);

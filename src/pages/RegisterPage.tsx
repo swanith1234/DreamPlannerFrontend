@@ -21,7 +21,8 @@ const RegisterPage: React.FC = () => {
         e.preventDefault();
         setLoading(true);
         try {
-            const { data } = await api.post('/auth/signup', { name, email, password });
+            const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const { data } = await api.post('/auth/signup', { name, email, password, timezone });
             login(data.user);
             navigate('/app/home');
         } catch (err: unknown) {
