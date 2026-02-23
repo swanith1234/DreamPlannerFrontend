@@ -71,9 +71,10 @@ const TasksPage: React.FC = () => {
 
         const current = new Date(today);
         while (current <= end) {
+            const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
             generated.push({
                 title: '',
-                targetDate: current.toISOString(),
+                targetDate: dateStr,
                 orderIndex: order++
             });
             current.setDate(current.getDate() + 1);
