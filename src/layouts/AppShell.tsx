@@ -208,6 +208,14 @@ const AppShell: React.FC = () => {
                         </button>
                     );
                 })}
+                {/* Mobile Logout Button */}
+                <button
+                    className={`${styles.mobileNavItem} ${styles.mobileLogoutBtn}`}
+                    onClick={handleLogout}
+                    style={{ color: 'var(--color-danger)' }}
+                >
+                    <RiLogoutBoxLine className={styles.icon} />
+                </button>
             </nav>
         </div>
     );

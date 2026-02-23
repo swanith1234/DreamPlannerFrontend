@@ -128,34 +128,34 @@ const HoloGauge: React.FC<{ value: number }> = ({ value }) => {
 
 const EffortChart: React.FC<{ dailyEffort: Record<string, number>; overachievementDays: number }> = ({ dailyEffort, overachievementDays: _overachievementDays }) => {
     const entries = Object.entries(dailyEffort);
-    const max = Math.max(...entries.map(([, v]) => v), 1);
-    const avg = entries.reduce((s, [, v]) => s + v, 0) / (entries.length || 1);
+    const maxVal = Math.max(120, ...entries.map(([, v]) => v)); // Headroom above 100
+    const TARGET = 100;
 
     const CHART_H = 140; // max bar body height
-    const CAP = 9;       // half-height of the ellipse caps
+    const CAP = 6;       // half-height of the narrower ellipse caps
 
     const barColor = (v: number) =>
         v === 0 ? 'rgba(255,255,255,0.08)'
-            : v > avg * 1.3 ? '#00ff9d'
-                : v >= avg * 0.8 ? '#6c63ff'
+            : v >= TARGET ? '#00ff9d'
+                : v >= TARGET * 0.7 ? '#6c63ff'
                     : '#ff6b35';
 
     return (
         <div style={{ position: 'relative', padding: `${CAP * 2 + 20}px 0 0` }}>
-            {/* Average target line */}
+            {/* Target 100 line */}
             <div style={{
                 position: 'absolute',
-                top: `${CAP * 2 + 20 + (1 - avg / max) * CHART_H}px`,
+                top: `${CAP * 2 + 20 + (1 - TARGET / maxVal) * CHART_H}px`,
                 left: 0, right: 0,
-                borderTop: '1px dashed rgba(255,255,255,0.2)',
+                borderTop: '1px dashed rgba(255,255,255,0.3)',
                 zIndex: 2, pointerEvents: 'none',
             }}>
-                <span style={{ position: 'absolute', right: 0, top: -10, fontSize: '0.6rem', color: 'rgba(255,255,255,0.4)' }}>avg</span>
+                <span style={{ position: 'absolute', right: 0, top: -14, fontSize: '0.65rem', fontWeight: 600, color: 'rgba(255,255,255,0.6)' }}>100 pts</span>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: CHART_H + CAP * 4 + 28 }}>
                 {entries.map(([date, value], i) => {
-                    const bodyH = value === 0 ? 4 : Math.max((value / max) * CHART_H, 12);
+                    const bodyH = value === 0 ? 4 : Math.max((value / maxVal) * CHART_H, 12);
                     const totalH = bodyH + CAP * 2; // body + top cap + bottom cap
                     const color = barColor(value);
                     const dayLabel = new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' });
@@ -170,7 +170,7 @@ const EffortChart: React.FC<{ dailyEffort: Record<string, number>; overachieveme
                                 initial={{ height: 0, opacity: 0 }}
                                 animate={{ height: totalH, opacity: [0, 1] }}
                                 transition={{ duration: 0.75, delay: i * 0.09, ease: [0.22, 1, 0.36, 1] }}
-                                style={{ position: 'relative', width: '100%', overflow: 'visible', cursor: 'default', marginBottom: 8 }}
+                                style={{ position: 'relative', width: '36px', overflow: 'visible', cursor: 'default', marginBottom: 8 }}
                             >
                                 {/* Flicker overlay for the whole cylinder */}
                                 {!empty && (
@@ -260,23 +260,6 @@ const EffortChart: React.FC<{ dailyEffort: Record<string, number>; overachieveme
                                     boxShadow: empty ? 'none' : `0 0 10px ${color}60`,
                                     zIndex: 3,
                                 }} />
-
-                                {/* ── Bright scan-line sweep (Iron Man style) ── */}
-                                {!empty && (
-                                    <motion.div
-                                        animate={{ y: [0, bodyH + CAP] }}
-                                        transition={{ duration: 1.4, repeat: Infinity, ease: 'linear', delay: i * 0.2 + 0.4 }}
-                                        style={{
-                                            position: 'absolute',
-                                            top: CAP, left: '-8%', right: '-8%',
-                                            height: Math.max(bodyH * 0.1, 5),
-                                            background: `linear-gradient(to bottom, transparent, ${color}cc, ${color}ff, ${color}cc, transparent)`,
-                                            boxShadow: `0 0 10px ${color}`,
-                                            pointerEvents: 'none',
-                                            filter: 'blur(1px)',
-                                        }}
-                                    />
-                                )}
                             </motion.div>
 
                             <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap' }}>
