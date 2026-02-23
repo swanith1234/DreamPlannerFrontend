@@ -53,11 +53,34 @@ export interface WeeklyInsightResponse {
     insight: { insightType: string; evidence: any } | null;
 }
 
+export interface SprintSummary {
+    id: string;
+    weekStart: string;
+    weekEnd: string;
+    disciplineScore: number;
+    executionRate: number;
+    recoveryRate: number;
+    totalCheckpointsPlanned: number;
+    totalCheckpointsCompleted: number;
+}
+
 export const analyticsApi = {
     // Live sprint dashboard (main endpoint)
     getWeeklyDashboard: async (date?: string): Promise<SprintDashboard> => {
         const params = date ? { date } : {};
         const response = await api.get('/analytics/dashboard', { params });
+        return response.data;
+    },
+
+    // List finalized sprints
+    listSprints: async (): Promise<SprintSummary[]> => {
+        const response = await api.get('/analytics/sprints');
+        return response.data;
+    },
+
+    // Get specific stored snapshot
+    getSprintByWeekStart: async (weekStart: string): Promise<any> => {
+        const response = await api.get(`/analytics/sprint/${weekStart}`);
         return response.data;
     },
 

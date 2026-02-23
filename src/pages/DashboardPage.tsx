@@ -390,6 +390,10 @@ const DashboardPage: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
+    // Sprint Picker
+    const [sprints, setSprints] = useState<any[]>([]);
+    const [selectedSprint, setSelectedSprint] = useState<string>('current');
+
     useEffect(() => {
         const onResize = () => setWindowWidth(window.innerWidth);
         window.addEventListener('resize', onResize);
@@ -398,12 +402,57 @@ const DashboardPage: React.FC = () => {
 
     const isMobile = windowWidth < 768;
 
+    // Fech past sprints on mount
     useEffect(() => {
-        analyticsApi.getWeeklyDashboard()
-            .then(setData)
-            .catch(e => setError(e.message))
-            .finally(() => setLoading(false));
+        analyticsApi.listSprints().then(setSprints).catch(console.error);
     }, []);
+
+    useEffect(() => {
+        setLoading(true);
+        setError(null);
+        if (selectedSprint === 'current') {
+            analyticsApi.getWeeklyDashboard()
+                .then(setData)
+                .catch(e => setError(e.message))
+                .finally(() => setLoading(false));
+        } else {
+            analyticsApi.getSprintByWeekStart(selectedSprint)
+                .then((snapshot: any) => {
+                    const onTime = Math.max(0, snapshot.totalCheckpointsCompleted - snapshot.earlyStarts - snapshot.recovered);
+                    setData({
+                        sprintWindow: {
+                            start: snapshot.weekStart.slice(0, 10),
+                            end: snapshot.weekEnd.slice(0, 10),
+                        },
+                        checkpoints: {
+                            planned: { count: snapshot.totalCheckpointsPlanned, items: [] },
+                            earlyCompleted: { count: snapshot.earlyStarts, items: [] },
+                            onTimeCompleted: { count: onTime, items: [] },
+                            recovered: { count: snapshot.recovered, items: [] },
+                            overduePending: { count: snapshot.overduePending, items: [] },
+                        },
+                        rates: {
+                            executionRate: snapshot.executionRate,
+                            recoveryRate: snapshot.recoveryRate,
+                        },
+                        activity: {
+                            activeDays: snapshot.activeDays,
+                            missedDays: snapshot.missedDays,
+                            overachievementDays: snapshot.overachievementDays,
+                            totalEffort: Object.values(snapshot.dailyEffort || {}).reduce((a: any, b: any) => a + Number(b), 0) as number,
+                            dailyEffort: snapshot.dailyEffort || {},
+                        },
+                        scores: {
+                            consistency: snapshot.consistencyScore,
+                            intensity: snapshot.intensityScore,
+                            disciplineScore: snapshot.disciplineScore,
+                        },
+                    });
+                })
+                .catch(e => setError(e.message))
+                .finally(() => setLoading(false));
+        }
+    }, [selectedSprint]);
 
     if (loading) return (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', gap: 16 }}>
@@ -428,13 +477,33 @@ const DashboardPage: React.FC = () => {
 
             {/* ── Header ── */}
             <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
-                style={{ marginBottom: 28 }}>
-                <h1 style={{ fontSize: isMobile ? '1.2rem' : '1.6rem', fontWeight: 800, margin: 0, background: 'linear-gradient(90deg, #fff, rgba(255,255,255,0.6))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                    Weekly Performance Dashboard
-                </h1>
-                <p style={{ color: 'rgba(255,255,255,0.35)', margin: '4px 0 0', fontSize: '0.82rem' }}>
-                    Sprint · {fmt(sprintWindow.start)} – {fmt(sprintWindow.end)}
-                </p>
+                style={{ marginBottom: 28, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
+                <div>
+                    <h1 style={{ fontSize: isMobile ? '1.2rem' : '1.6rem', fontWeight: 800, margin: 0, background: 'linear-gradient(90deg, #fff, rgba(255,255,255,0.6))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                        Weekly Performance Dashboard
+                    </h1>
+                    <p style={{ color: 'rgba(255,255,255,0.35)', margin: '4px 0 0', fontSize: '0.82rem' }}>
+                        Sprint · {fmt(sprintWindow.start)} – {fmt(sprintWindow.end)}
+                    </p>
+                </div>
+
+                <select
+                    value={selectedSprint}
+                    onChange={e => setSelectedSprint(e.target.value)}
+                    style={{
+                        background: 'rgba(255,255,255,0.05)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        color: 'white', padding: '8px 12px', borderRadius: 8,
+                        outline: 'none', cursor: 'pointer', fontSize: '0.9rem'
+                    }}
+                >
+                    <option value="current" style={{ color: 'black' }}>Current Sprint</option>
+                    {sprints.map(s => (
+                        <option key={s.id} value={s.weekStart.slice(0, 10)} style={{ color: 'black' }}>
+                            {fmt(s.weekStart.slice(0, 10))} – {fmt(s.weekEnd.slice(0, 10))}
+                        </option>
+                    ))}
+                </select>
             </motion.div>
 
             {/* ── Main grid ── */}
