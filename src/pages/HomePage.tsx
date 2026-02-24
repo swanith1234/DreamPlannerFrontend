@@ -51,7 +51,7 @@ const HomePage: React.FC = () => {
 
             // Browser System Notification
             if (document.hidden && Notification.permission === 'granted') {
-                new Notification('DreamPlanner', {
+                new Notification('IgniteMate', {
                     body: normalized.message,
                     icon: '../public/dreamPlannerFavicon.jpeg'
                 });

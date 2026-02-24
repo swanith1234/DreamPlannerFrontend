@@ -95,7 +95,7 @@ const RegisterPage: React.FC = () => {
                             />
                         </div>
                         <GlowButton type="submit" fullWidth>
-                            Join DreamPlanner
+                            Join IgniteMate
                         </GlowButton>
                     </form>
 

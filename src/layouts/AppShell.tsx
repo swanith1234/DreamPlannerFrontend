@@ -162,7 +162,10 @@ const AppShell: React.FC = () => {
 
             {/* Sidebar for Desktop / Hidden on Mobile */}
             <aside className={styles.sidebar}>
-                <div className={styles.logo}>DP</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: 'var(--spacing-2xl)' }}>
+                    <img src="/logo.png" alt="IgniteMate" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />
+                    <span className={styles.logo} style={{ marginBottom: 0 }}>IgniteMate</span>
+                </div>
                 <nav className={styles.nav}>
                     {navItems.map((item) => {
                         const isActive = location.pathname.startsWith(item.path);
