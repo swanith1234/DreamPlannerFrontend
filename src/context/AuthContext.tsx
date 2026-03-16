@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import api from '../api/client';
+import axios from 'axios';
 
 interface User {
     id: string;
@@ -43,10 +44,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     signal: controller.signal,
                 });
                 setUser(data.user);
+                clearTimeout(timer);
+                setLoading(false);
             } catch (error: any) {
-                // Aborted (timeout) or genuine 401 — either way, not authenticated right now
+                // Ignore aborts from React Strict Mode double-mounting
+                if (error.name === 'CanceledError' || error.message?.includes('aborted') || axios.isCancel(error)) {
+                    return; // Do NOT set loading to false; let the second mount finish
+                }
+                
+                // Aborted by timeout or genuine 401 — either way, not authenticated right now
                 setUser(null);
-            } finally {
                 clearTimeout(timer);
                 setLoading(false);
             }
