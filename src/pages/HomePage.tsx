@@ -135,6 +135,19 @@ const MessageBubble: React.FC<{ msg: ChatMessage }> = ({ msg }) => {
     );
 };
 
+const TypedLoading: React.FC<{ text: string }> = ({ text }) => {
+    const [dots, setDots] = useState('');
+    useEffect(() => {
+        const id = setInterval(() => setDots(d => (d.length >= 3 ? '' : d + '.')), 400);
+        return () => clearInterval(id);
+    }, []);
+    return (
+        <span style={{ fontSize: '0.75rem', color: 'var(--color-accent)', opacity: 0.8, letterSpacing: '0.5px' }}>
+            {text}{dots}
+        </span>
+    );
+};
+
 // ── Main HomePage (AI Chat) ───────────────────────────────────────────────────
 
 const HomePage: React.FC = () => {
@@ -144,17 +157,22 @@ const HomePage: React.FC = () => {
     const [editableContent, setEditableContent] = useState<string | undefined>();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
+    const [hasMore, setHasMore] = useState(true);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
+    const topRef = useRef<HTMLDivElement>(null);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-    // Initial fetch for history or greeting if empty
+    // Initial fetch for history
     useEffect(() => {
-        const fetchHistory = async () => {
+        const fetchInitialHistory = async () => {
              try {
-                 const { data } = await api.get('/chat/history');
+                 const { data } = await api.get('/chat/history', { params: { limit: 20 } });
                  if (data && data.length > 0) {
                      setMessages(data);
-                     // Mark messages as read when UI loads history
+                     setHasMore(data.length === 20);
                      api.patch('/chat/seen').catch(() => {});
                  } else {
+                     setHasMore(false);
                      setMessages([{
                          id: crypto.randomUUID(),
                          text: "Hey! What are we crushing today? 🔥",
@@ -164,7 +182,7 @@ const HomePage: React.FC = () => {
                  }
              } catch (err: any) {
                  console.error("Failed to fetch chat history:", err);
-                 // Fallback to greeting if API fails or backend not updated yet
+                 setHasMore(false);
                  setMessages([{
                      id: crypto.randomUUID(),
                      text: "Hey! What are we crushing today? 🔥",
@@ -173,13 +191,65 @@ const HomePage: React.FC = () => {
                  }]);
              }
         };
-        fetchHistory();
+        fetchInitialHistory();
     }, []);
 
-    // Auto-scroll on new messages / typing
+    // Load older messages (Pagination)
+    const loadMore = async () => {
+        if (isLoadingMore || !hasMore || messages.length === 0) return;
+
+        setIsLoadingMore(true);
+        const oldestMsg = messages[0];
+        const before = oldestMsg.timestamp;
+
+        // Capture scroll height before prepending
+        const container = scrollContainerRef.current;
+        const previousScrollHeight = container?.scrollHeight || 0;
+
+        try {
+            const { data } = await api.get('/chat/history', { params: { limit: 20, before } });
+            
+            if (data && data.length > 0) {
+                setMessages(prev => [...data, ...prev]);
+                setHasMore(data.length === 20);
+
+                // Scroll Recovery (WhatsApp-style anchoring)
+                requestAnimationFrame(() => {
+                    if (container) {
+                        const newScrollHeight = container.scrollHeight;
+                        container.scrollTop = newScrollHeight - previousScrollHeight;
+                    }
+                });
+            } else {
+                setHasMore(false);
+            }
+        } catch (err) {
+            console.error("Load more failed:", err);
+        } finally {
+            setIsLoadingMore(false);
+        }
+    };
+
+    // Auto-scroll on new messages (received while at bottom)
     useEffect(() => {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages, isTyping]);
+        // Only auto-scroll if it's the very first load or if a NEW message just came in at bottom
+        // We handle pagination scroll recovery separately in loadMore
+        if (!isLoadingMore) {
+            bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [messages.length, isTyping]);
+
+    // Intersection Observer for scroll-to-top
+    useEffect(() => {
+        const observer = new IntersectionObserver(([entry]) => {
+            if (entry.isIntersecting) {
+                loadMore();
+            }
+        }, { threshold: 0.5 });
+
+        if (topRef.current) observer.observe(topRef.current);
+        return () => observer.disconnect();
+    }, [messages, hasMore, isLoadingMore]);
 
     // Auto-fill input with editable content
     useEffect(() => {
@@ -214,7 +284,6 @@ const HomePage: React.FC = () => {
         setIsTyping(true);
 
         try {
-            // api client already has withCredentials: true
             const { data } = await api.post('/chat', { message: text });
 
             setMessages(prev => [...prev, {
@@ -226,9 +295,7 @@ const HomePage: React.FC = () => {
                 editableContent: data.editableContent,
             }]);
 
-            // Mark session as seen after receiving a reply
             api.patch('/chat/seen').catch(() => {});
-
             if (data.editableContent) setEditableContent(data.editableContent);
 
         } catch (err: any) {
@@ -287,8 +354,17 @@ const HomePage: React.FC = () => {
                 </div>
 
                 {/* ── Messages ── */}
-                <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 16, display: 'flex', flexDirection: 'column', paddingRight: 4 }}>
-                    <AnimatePresence>
+                <div ref={scrollContainerRef} style={{ flex: 1, overflowY: 'auto', paddingBottom: 16, display: 'flex', flexDirection: 'column', paddingRight: 4 }}>
+                    {/* Top Anchor for Infinite Scroll */}
+                    <div ref={topRef} style={{ height: 10, visibility: 'hidden' }} />
+                    
+                    {isLoadingMore && (
+                        <div style={{ textAlign: 'center', padding: '10px 0', opacity: 0.6 }}>
+                            <TypedLoading text="Fetching older messages..." />
+                        </div>
+                    )}
+
+                    <AnimatePresence initial={false}>
                         {messages.map(msg => <MessageBubble key={msg.id} msg={msg} />)}
                         {isTyping && <TypingIndicator key="typing" />}
                     </AnimatePresence>
