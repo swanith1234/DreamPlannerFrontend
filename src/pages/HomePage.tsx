@@ -160,12 +160,21 @@ const HomePage: React.FC = () => {
     const [hasMore, setHasMore] = useState(true);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     const topRef = useRef<HTMLDivElement>(null);
+    const [agentName, setAgentName] = useState('IgniteMate');
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
     // Initial fetch for history
     useEffect(() => {
         const fetchInitialHistory = async () => {
              try {
+                 // Fetch names
+                 const prefRes = await api.get('/users/preferences');
+                 const prefs = prefRes.data;
+                 const userName = prefs?.user?.name || 'Architect';
+                 const aName = prefs?.agentName || `Future ${userName}`;
+                 const pName = prefs?.preferredName || userName;
+                 setAgentName(aName);
+
                  const { data } = await api.get('/chat/history', { params: { limit: 20 } });
                  if (data && data.length > 0) {
                      setMessages(data);
@@ -175,7 +184,7 @@ const HomePage: React.FC = () => {
                      setHasMore(false);
                      setMessages([{
                          id: crypto.randomUUID(),
-                         text: "Hey! What are we crushing today? 🔥",
+                         text: `Hey ${pName || 'there'}! What are we crushing today? 🔥`,
                          sender: 'AI',
                          timestamp: Date.now(),
                      }]);
@@ -335,12 +344,14 @@ const HomePage: React.FC = () => {
                             background: 'var(--color-bg-primary)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                         }}>
-                            <span style={{ color: 'var(--color-accent)', fontWeight: 'bold', fontSize: '0.9rem', fontFamily: 'var(--font-heading)' }}>IM</span>
+                            <span style={{ color: 'var(--color-accent)', fontWeight: 'bold', fontSize: '0.9rem', fontFamily: 'var(--font-heading)' }}>
+                                {agentName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'IM'}
+                            </span>
                         </div>
                     </div>
                     <div>
                         <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.1rem', fontWeight: 700, color: 'var(--color-text-primary)', lineHeight: 1.2 }}>
-                            IgniteMate
+                            {agentName}
                         </h1>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <motion.span
@@ -390,7 +401,7 @@ const HomePage: React.FC = () => {
                             onChange={e => setInputValue(e.target.value)}
                             onKeyDown={handleKeyDown}
                             disabled={isTyping}
-                            placeholder={isTyping ? 'IgniteMate is thinking...' : 'Ask something...'}
+                            placeholder={isTyping ? `${agentName} is thinking...` : 'Ask something...'}
                             rows={1}
                             style={{
                                 flex: 1,

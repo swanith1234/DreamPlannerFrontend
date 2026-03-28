@@ -17,6 +17,8 @@ const SettingsPage: React.FC = () => {
     const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
     const [isSaving, setIsSaving] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    const [agentName, setAgentName] = useState('');
+    const [preferredName, setPreferredName] = useState('');
 
     React.useEffect(() => {
         const fetchPreferences = async () => {
@@ -27,6 +29,8 @@ const SettingsPage: React.FC = () => {
                     setNotificationFrequency(data.notificationFrequency || 60);
                     setSleepStart(data.sleepStart || '23:00');
                     setSleepEnd(data.sleepEnd || '07:00');
+                    setAgentName(data.agentName || '');
+                    setPreferredName(data.preferredName || '');
                 }
                 // Separately fetch user profile for timezone
                 try {
@@ -87,7 +91,9 @@ const SettingsPage: React.FC = () => {
                 notificationFrequency,
                 sleepStart,
                 sleepEnd,
-                quietHours: []
+                quietHours: [],
+                agentName,
+                preferredName
             });
             // Also save timezone
             await api.put('/users/profile', { timezone });
@@ -291,6 +297,39 @@ const SettingsPage: React.FC = () => {
                             </div>
                         </div>
                         <Toggle checked={particles} onChange={setParticles} />
+                    </GlassCard>
+
+                    {/* AI Identity Section */}
+                    <GlassCard>
+                        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+                            <RiVolumeUpLine style={{ fontSize: '1.5rem', marginRight: '16px', color: 'var(--color-accent)' }} />
+                            <div>
+                                <h3 style={{ fontSize: '1.1rem' }}>AI Identity & Addressing</h3>
+                                <p style={{ fontSize: '0.9rem', color: 'var(--color-text-secondary)' }}>Personalize how the AI interacts with you</p>
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '24px', flexDirection: 'column' }}>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem' }}>Agent Name (e.g. "Future Jarvis")</label>
+                                <input
+                                    type="text"
+                                    placeholder="Leave blank for default"
+                                    value={agentName}
+                                    onChange={(e) => setAgentName(e.target.value)}
+                                    style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none' }}
+                                />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem' }}>How should the agent address you?</label>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. Boss, Captain, Tony"
+                                    value={preferredName}
+                                    onChange={(e) => setPreferredName(e.target.value)}
+                                    style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none' }}
+                                />
+                            </div>
+                        </div>
                     </GlassCard>
 
                 </div>
