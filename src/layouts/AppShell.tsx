@@ -12,7 +12,9 @@ import {
     RiCheckboxCircleFill,
     RiSettings4Line,
     RiSettings4Fill,
-    RiLogoutBoxLine
+    RiLogoutBoxLine,
+    RiRoadMapLine,
+    RiRoadMapFill
 } from 'react-icons/ri';
 import { useAuth } from '../context/AuthContext';
 import styles from './AppShell.module.css';
@@ -91,6 +93,7 @@ const AppShell: React.FC = () => {
         { path: '/app/home', icon: RiHome5Line, activeIcon: RiHome5Fill, label: 'Home' },
         { path: '/app/dashboard', icon: RiDashboardLine, activeIcon: RiDashboardFill, label: 'Dashboard' },
         { path: '/app/dreams', icon: RiMoonClearLine, activeIcon: RiMoonClearFill, label: 'Dreams' },
+        { path: '/app/roadmap', icon: RiRoadMapLine, activeIcon: RiRoadMapFill, label: 'Roadmap' },
         { path: '/app/tasks', icon: RiCheckboxCircleLine, activeIcon: RiCheckboxCircleFill, label: 'Tasks' },
         { path: '/app/settings', icon: RiSettings4Line, activeIcon: RiSettings4Fill, label: 'Settings' },
     ];

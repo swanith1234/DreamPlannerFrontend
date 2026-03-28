@@ -14,6 +14,9 @@ import TasksPage from './pages/TasksPage';
 import TaskDetailPage from './pages/TaskDetailPage';
 import SettingsPage from './pages/SettingsPage';
 import DashboardPage from './pages/DashboardPage';
+import RoadmapPage from './pages/RoadmapPage';
+import AssessmentPage from './pages/AssessmentPage';
+import RoadmapRedirect from './components/RoadmapRedirect';
 
 // Protected Route Wrapper
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -45,6 +48,9 @@ const AnimatedRoutes: React.FC = () => {
           <Route path="home" element={<HomePage />} />
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="dreams" element={<DreamsPage />} />
+          <Route path="dreams/:dreamId/roadmap" element={<RoadmapPage />} />
+          <Route path="roadmap" element={<RoadmapRedirect />} />
+          <Route path="assessments/:assessmentId" element={<AssessmentPage />} />
           <Route path="tasks" element={<TasksPage />} />
           <Route path="tasks/:taskId" element={<TaskDetailPage />} />
           <Route path="settings" element={<SettingsPage />} />
