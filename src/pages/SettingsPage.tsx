@@ -111,7 +111,7 @@ const SettingsPage: React.FC = () => {
     return (
         <PageTransition>
             {isSaving && <PageLoader />}
-            <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+            <div style={{ maxWidth: '600px', margin: '0 auto', paddingBottom: '120px' }}>
                 <h2 style={{ marginBottom: '32px' }}>System Configuration</h2>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
