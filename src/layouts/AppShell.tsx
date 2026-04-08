@@ -13,8 +13,7 @@ import {
     RiSettings4Line,
     RiSettings4Fill,
     RiLogoutBoxLine,
-    RiRoadMapLine,
-    RiRoadMapFill
+    RiRoadMapLine
 } from 'react-icons/ri';
 import { useAuth } from '../context/AuthContext';
 import styles from './AppShell.module.css';
@@ -25,21 +24,23 @@ const AppShell: React.FC = () => {
     const { logout } = useAuth();
     const [showNotifBanner, setShowNotifBanner] = useState(false);
 
+    // Corrected Notification Session Logic
     useEffect(() => {
-        if ('Notification' in window && Notification.permission === 'default') {
-            setShowNotifBanner(true);
+        const hasAskedThisSession = sessionStorage.getItem('asked_notifications');
+        if ('Notification' in window && Notification.permission === 'default' && !hasAskedThisSession) {
+            const timer = setTimeout(() => {
+                setShowNotifBanner(true);
+                sessionStorage.setItem('asked_notifications', 'true');
+            }, 2000);
+            return () => clearTimeout(timer);
         }
     }, []);
 
     const urlBase64ToUint8Array = (base64String: string) => {
         const padding = '='.repeat((4 - base64String.length % 4) % 4);
-        const base64 = (base64String + padding)
-            .replace(/\-/g, '+')
-            .replace(/_/g, '/');
-
+        const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
         const rawData = window.atob(base64);
         const outputArray = new Uint8Array(rawData.length);
-
         for (let i = 0; i < rawData.length; ++i) {
             outputArray[i] = rawData.charCodeAt(i);
         }
@@ -51,41 +52,21 @@ const AppShell: React.FC = () => {
         try {
             const permission = await Notification.requestPermission();
             if (permission !== 'granted') return;
-
             setShowNotifBanner(false);
-
-            // Register Service Worker
+            /* 
+            // Register Service Worker - DISABLED TEMPORARILY TO FIX CACHE SYNC
             if ('serviceWorker' in navigator) {
-                const register = await navigator.serviceWorker.register('/sw.js', {
-                    scope: '/'
-                });
-
-                // Get VAPID Key
-                // Ideally use an API call to get it, or env if exposed
-                // For now, we fetch it from backend or env. 
-                // Using env var VITE_VAPID_PUBLIC_KEY would be best, but we created an endpoint /api/notifications/vapid-key
-                // Let's use the endpoint or hardcode for now if env not possible to sync easily dynamics.
-                // We'll try to fetch it.
-
-                // Note: You need to expose VAPID public key to frontend via API or ENV.
-                // We added /api/notifications/vapid-key in backend.
-
-                // Fetch VAPID key
-                // Using api client
+                const register = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
                 const { data: { publicKey } } = await import('../api/client').then(m => m.default.get('/notifications/vapid-key'));
-
                 const subscription = await register.pushManager.subscribe({
                     userVisibleOnly: true,
                     applicationServerKey: urlBase64ToUint8Array(publicKey)
                 });
-
-                // Send subscription to backend
                 await import('../api/client').then(m => m.default.post('/notifications/subscribe', subscription));
-                console.log("Push Notification Subscribed!");
             }
-
+            */
         } catch (error) {
-            console.error("Error requesting notification permission or subscribing", error);
+            console.error("Error subscribing", error);
         }
     };
 
@@ -93,7 +74,6 @@ const AppShell: React.FC = () => {
         { path: '/app/home', icon: RiHome5Line, activeIcon: RiHome5Fill, label: 'Home' },
         { path: '/app/dashboard', icon: RiDashboardLine, activeIcon: RiDashboardFill, label: 'Dashboard' },
         { path: '/app/dreams', icon: RiMoonClearLine, activeIcon: RiMoonClearFill, label: 'Dreams' },
-        { path: '/app/roadmap', icon: RiRoadMapLine, activeIcon: RiRoadMapFill, label: 'Roadmap' },
         { path: '/app/tasks', icon: RiCheckboxCircleLine, activeIcon: RiCheckboxCircleFill, label: 'Tasks' },
         { path: '/app/settings', icon: RiSettings4Line, activeIcon: RiSettings4Fill, label: 'Settings' },
     ];
@@ -105,61 +85,63 @@ const AppShell: React.FC = () => {
 
     return (
         <div className={styles.container}>
-            {/* Notification Permission Banner */}
+            {/* Notification Permission Modal */}
             <AnimatePresence>
                 {showNotifBanner && (
-                    <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        className={styles.notificationBanner}
-                        style={{
-                            position: 'fixed',
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            zIndex: 1000,
-                            background: 'var(--color-primary)',
-                            color: 'white',
-                            textAlign: 'center',
-                            padding: '8px',
-                            fontSize: '0.9rem',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                            gap: '12px'
-                        }}
-                    >
-                        <span>Enable notifications to get real-time updates on your dreams and tasks!</span>
-                        <button
-                            onClick={enableNotifications}
+                    <div style={{
+                        position: 'fixed', inset: 0, zIndex: 2000,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(10px)'
+                    }}>
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
                             style={{
-                                background: 'white',
-                                color: 'var(--color-primary)',
-                                border: 'none',
-                                borderRadius: '4px',
-                                padding: '4px 12px',
-                                cursor: 'pointer',
-                                fontWeight: 'bold'
+                                width: '400px', maxWidth: '90%', padding: '32px',
+                                background: '#0a0f18', border: '1px solid rgba(0, 242, 234, 0.2)',
+                                borderRadius: '24px', textAlign: 'center', boxShadow: '0 0 40px rgba(0, 242, 234, 0.1)'
                             }}
                         >
-                            Enable
-                        </button>
-                        <button
-                            onClick={() => setShowNotifBanner(false)}
-                            style={{
-                                background: 'transparent',
-                                border: 'none',
-                                color: 'rgba(255,255,255,0.8)',
-                                cursor: 'pointer',
-                                fontSize: '1.2rem',
-                                display: 'flex',
-                                alignItems: 'center'
-                            }}
-                        >
-                            &times;
-                        </button>
-                    </motion.div>
+                            <div style={{
+                                width: '64px', height: '64px', borderRadius: '50%',
+                                background: 'rgba(0, 242, 234, 0.1)', display: 'flex',
+                                alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px'
+                            }}>
+                                <RiRoadMapLine size={32} color="var(--color-accent)" />
+                            </div>
+                            <h3 style={{ fontSize: '1.5rem', marginBottom: '16px' }}>Stay in the Loop</h3>
+                            <p style={{ color: 'var(--color-text-secondary)', marginBottom: '32px', lineHeight: '1.6' }}>
+                                Enable notifications to get real-time nudges, motivational alerts, and progress checks for your journey!
+                            </p>
+                            <div style={{ display: 'flex', gap: '12px' }}>
+                                <button
+                                    onClick={() => setShowNotifBanner(false)}
+                                    style={{
+                                        flex: 1, padding: '12px', borderRadius: '12px',
+                                        background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                                        color: 'white', fontWeight: 600, cursor: 'pointer'
+                                    }}
+                                >
+                                    Not Now
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        enableNotifications();
+                                        setShowNotifBanner(false);
+                                    }}
+                                    style={{
+                                        flex: 2, padding: '12px', borderRadius: '12px',
+                                        background: 'var(--color-accent)', border: 'none',
+                                        color: 'black', fontWeight: 700, cursor: 'pointer',
+                                        boxShadow: '0 0 20px rgba(0, 242, 234, 0.3)'
+                                    }}
+                                >
+                                    Enable
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
                 )}
             </AnimatePresence>
 

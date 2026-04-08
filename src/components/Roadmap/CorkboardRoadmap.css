@@ -210,14 +210,57 @@
 .paper-node-star-filled { color: #b8860b; }
 .paper-node-star-empty { color: rgba(40,50,50,0.1); }
 
-/* Handles */
-.paper-node .react-flow__handle { width: 10px !important; height: 10px !important; background: #8b6914 !important; border: 2px solid #5a4a10 !important; border-radius: 50% !important; opacity: 0 !important; transition: opacity 0.2s ease !important; }
-.paper-node-editing .react-flow__handle { opacity: 0.8 !important; }
-.paper-node:hover .react-flow__handle { opacity: 0.5 !important; }
-.paper-node-drag-handle { position: absolute; left: 6px; top: 20px; color: rgba(40,50,50,0.2); }
+/* Handles / Grommets — visible only in edit mode via wrapper class */
+.react-flow__handle {
+  width: 22px !important;
+  height: 22px !important;
+  background: radial-gradient(circle at 30% 30%, #ffd700, #daa520, #886611) !important;
+  border: 2px solid rgba(0,0,0,0.4) !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.5), inset 0 1px 2px rgba(255,255,255,0.4) !important;
+  z-index: 9999 !important;
+  transition: opacity 0.2s ease, transform 0.2s ease, filter 0.2s ease !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  cursor: crosshair !important;
+}
+/* When wrapper has the edit-mode class, make handles fully interactive */
+.paper-node-wrapper--editing .react-flow__handle {
+  opacity: 1 !important;
+  pointer-events: all !important;
+}
+.react-flow__handle:hover {
+  transform: scale(1.25) !important;
+  filter: brightness(1.3) drop-shadow(0 0 14px rgba(0, 242, 234, 0.9)) !important;
+  background: radial-gradient(circle at 30% 30%, #00f2ea, #00c4bd) !important;
+}
+
+/* Top/Bottom/Left/Right handle positions — relative to paper-node-wrapper */
+.paper-node-grommet-top    { top: -11px !important;  left: 50% !important; transform: translateX(-50%) !important; }
+.paper-node-grommet-bottom { bottom: -11px !important; left: 50% !important; transform: translateX(-50%) !important; }
+.paper-node-grommet-left   { left: -11px !important;  top: 50% !important; transform: translateY(-50%) !important; }
+.paper-node-grommet-right  { right: -11px !important; top: 50% !important; transform: translateY(-50%) !important; }
+
+/* Don't let the default React Flow positioning override our custom ones */
+.paper-node-grommet-top.react-flow__handle,
+.paper-node-grommet-bottom.react-flow__handle,
+.paper-node-grommet-left.react-flow__handle,
+.paper-node-grommet-right.react-flow__handle {
+  position: absolute !important;
+}
+
+/* Edge interaction styles */
+.react-flow__edge { cursor: pointer !important; }
+.react-flow__edge:hover .react-flow__edge-path { stroke-width: 3.5 !important; filter: drop-shadow(0 0 6px rgba(255,215,0,0.5)) !important; }
+.react-flow__edge.selected .react-flow__edge-path { stroke: #ff6b6b !important; stroke-width: 3 !important; stroke-dasharray: 6,4 !important; }
+/* Reconnect endpoint drag handle */
+.react-flow__edgeupdater { r: 8 !important; fill: #ffd700 !important; stroke: rgba(0,0,0,0.4) !important; cursor: grab !important; }
+.react-flow__edgeupdater:hover { r: 10 !important; fill: #00f2ea !important; filter: drop-shadow(0 0 8px rgba(0,242,234,0.8)) !important; }
+
+.paper-node-drag-handle { position: absolute; left: 6px; top: 20px; color: rgba(40,50,50,0.2); cursor: grab; }
+.paper-node-drag-handle:active { cursor: grabbing; }
 
 /* Edit mode border indicator */
-.paper-node-editing { outline: 2px dashed rgba(0,242,234,0.3); outline-offset: 2px; }
+.paper-node-editing { outline: 1px dashed rgba(26,58,107,0.2); outline-offset: 2px; }
 
 /* Delete button on node */
 .paper-node-delete-btn {

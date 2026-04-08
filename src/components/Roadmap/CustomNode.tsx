@@ -33,16 +33,18 @@ const CustomNode: React.FC<NodeProps> = ({ id, data }) => {
     isActive ? 'paper-node-active-wrapper' : '',
     isCompleted ? 'paper-node-completed-wrapper' : '',
     (isFailed || isRevision) ? 'paper-node-failed-wrapper' : '',
+    d.isEditMode ? 'paper-node-wrapper--editing' : '',
   ].filter(Boolean).join(' ');
 
   const editClass = d.isEditMode ? 'paper-node-editing' : '';
 
   return (
     <div className={wrapperClass}>
-      {/* Delete button — only in edit mode, appears on hover */}
+      {/* Delete button */}
       {d.isEditMode && d.onDeleteNode && (
         <button
           className="paper-node-delete-btn"
+          style={{ right: 8, top: -8 }}
           onClick={(e) => {
             e.stopPropagation();
             d.onDeleteNode!(id);
@@ -52,6 +54,32 @@ const CustomNode: React.FC<NodeProps> = ({ id, data }) => {
           <X size={10} />
         </button>
       )}
+
+      {/* Handles OUTSIDE paper-node to avoid overflow:hidden clipping */}
+      <Handle
+        type="target"
+        position={Position.Top}
+        className="paper-node-grommet paper-node-grommet-top"
+        isConnectable={!!d.isEditMode}
+      />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        className="paper-node-grommet paper-node-grommet-bottom"
+        isConnectable={!!d.isEditMode}
+      />
+      <Handle
+        type="target"
+        position={Position.Left}
+        className="paper-node-grommet paper-node-grommet-left"
+        isConnectable={!!d.isEditMode}
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
+        className="paper-node-grommet paper-node-grommet-right"
+        isConnectable={!!d.isEditMode}
+      />
 
       <div className={`paper-node ${editClass}`}>
         {isCompleted && <span className="paper-node-checkmark">✓</span>}
@@ -79,9 +107,6 @@ const CustomNode: React.FC<NodeProps> = ({ id, data }) => {
         </div>
 
         <div className="paper-node-fold" />
-
-        <Handle type="target" position={Position.Top} style={{ visibility: d.isEditMode ? 'visible' : 'hidden' }} />
-        <Handle type="source" position={Position.Bottom} style={{ visibility: d.isEditMode ? 'visible' : 'hidden' }} />
       </div>
     </div>
   );

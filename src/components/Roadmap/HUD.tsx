@@ -84,6 +84,7 @@ const HUD: React.FC<HUDProps> = ({
           <line x1="16" y1="16" x2="26" y2="24" stroke="currentColor" strokeWidth="1.5" opacity="0.4" />
         </svg>
         <span className="corkboard-brand-text" style={{ fontSize: '1rem', letterSpacing: '2px', color: '#fff', marginLeft: 8 }}>AETHERFLOW</span>
+        <span style={{ fontSize: '10px', color: '#00f2ea', marginLeft: 12, fontWeight: 700, letterSpacing: '1px', padding: '2px 6px', border: '1px solid rgba(0,242,234,0.3)', borderRadius: '4px' }}>v2.1 GROMMET FIX</span>
       </div>
 
       {/* Center — Telemetry Dashboard */}

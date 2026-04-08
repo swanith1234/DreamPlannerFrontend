@@ -275,15 +275,15 @@ const SettingsPage: React.FC = () => {
                         </div>
                         <input
                             type="range"
-                            min="15"
-                            max="240"
-                            step="15"
+                            min="60"
+                            max="1440"
+                            step="60"
                             value={notificationFrequency}
                             onChange={(e) => setNotificationFrequency(parseInt(e.target.value))}
                             style={{ width: '100%', accentColor: 'var(--color-accent)' }}
                         />
                         <div style={{ textAlign: 'right', marginTop: '8px', color: 'var(--color-accent)' }}>
-                            Every {notificationFrequency} minutes
+                            Every {notificationFrequency / 60} {notificationFrequency / 60 === 1 ? 'hour' : 'hours'}
                         </div>
                     </GlassCard>
 
