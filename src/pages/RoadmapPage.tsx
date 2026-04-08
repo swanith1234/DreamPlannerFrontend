@@ -188,8 +188,9 @@ export default function RoadmapPage() {
 
   return (
     <PageTransition>
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 20px 80px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 40 }}>
+      {/* ── Desktop page header — hidden on mobile (mobile view has its own header) ── */}
+      <div className="roadmap-page-header" style={{ maxWidth: 1100, margin: '0 auto', padding: '0 20px 80px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 40, flexWrap: 'wrap', gap: 12 }}>
           <div>
             <h2 style={{ fontSize: '2.2rem', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: 12 }}>
               AetherFlow Roadmap

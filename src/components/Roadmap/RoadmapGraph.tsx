@@ -5,7 +5,9 @@ import {
   applyNodeChanges,
   applyEdgeChanges,
   addEdge,
+  reconnectEdge,
   ReactFlowProvider,
+  ConnectionMode,
 } from '@xyflow/react';
 import type {
   Node,
@@ -13,6 +15,7 @@ import type {
   OnNodesChange,
   OnEdgesChange,
   OnConnect,
+  OnReconnect,
   Connection,
   NodeTypes,
 } from '@xyflow/react';
@@ -22,6 +25,7 @@ import { RotateCcw, SkipForward, Plus } from 'lucide-react';
 
 import CustomNode from './CustomNode';
 import HUD from './HUD';
+import MobileRoadmapView from './MobileRoadmapView';
 import { calculatePredictiveETA } from '../../utils/etaEngine';
 import './CorkboardRoadmap.css';
 
@@ -180,16 +184,21 @@ const RoadmapGraphContent: React.FC<RoadmapGraphProps> = ({
     setFailedNode(null);
   }, [failedNode, onUpdateMilestoneStatus]);
 
-  // --- INIT NODES with localStorage persistence ---
+  // --- Load saved positions ONCE on mount (never clear them on re-render) ---
+  const savedPositionsRef = useRef<Record<string, { x: number; y: number }>>({});
   useEffect(() => {
-    let savedPositions: Record<string, { x: number; y: number }> = {};
     try {
       const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed?.positions) savedPositions = parsed.positions;
+        if (parsed?.positions) savedPositionsRef.current = parsed.positions;
       }
     } catch {/* ignore */}
+  }, []); // mount only — never wipe positions on re-render
+
+  // --- INIT NODES (rebuilds graph when milestones or edit mode changes) ---
+  useEffect(() => {
+    const savedPositions = savedPositionsRef.current; // read from ref, not localStorage
 
     const initialNodes: Node[] = [];
     const initialEdges: Edge[] = [];
@@ -231,18 +240,21 @@ const RoadmapGraphContent: React.FC<RoadmapGraphProps> = ({
         draggable: isEditMode,
       });
 
-      if (mIdx > 0) {
-        const prevId = milestones[mIdx - 1].id;
-        const prevDone = milestones[mIdx - 1].status === 'COMPLETED';
-        initialEdges.push({
-          id: `e-${prevId}-${nodeId}`,
-          source: prevId, target: nodeId,
-          animated: computedStatus === 'IN_PROGRESS',
-          style: {
-            stroke: prevDone ? '#2d6a4f' : computedStatus === 'IN_PROGRESS' ? '#00f2ea' : '#8B6914',
-            strokeWidth: computedStatus === 'IN_PROGRESS' ? 2 : 2.5,
-            filter: computedStatus === 'IN_PROGRESS' ? 'drop-shadow(0 0 6px rgba(0,242,234,0.5))' : 'none',
-          },
+      if (m.parentIds && m.parentIds.length > 0) {
+        m.parentIds.forEach((pId: string) => {
+          const parentMile = milestones.find((mi: any) => mi.id === pId);
+          const isDone = parentMile?.status === 'COMPLETED';
+          initialEdges.push({
+            id: `e-${pId}-${nodeId}`,
+            source: pId,
+            target: nodeId,
+            animated: computedStatus === 'IN_PROGRESS',
+            style: {
+              stroke: isDone ? '#2d6a4f' : computedStatus === 'IN_PROGRESS' ? '#00f2ea' : '#8B6914',
+              strokeWidth: computedStatus === 'IN_PROGRESS' ? 2 : 2.5,
+              filter: computedStatus === 'IN_PROGRESS' ? 'drop-shadow(0 0 6px rgba(0,242,234,0.5))' : 'none',
+            },
+          });
         });
       }
     });
@@ -264,6 +276,7 @@ const RoadmapGraphContent: React.FC<RoadmapGraphProps> = ({
   const savePositions = useCallback((updatedNodes: Node[]) => {
     const positions: Record<string, { x: number; y: number }> = {};
     updatedNodes.forEach((n) => { positions[n.id] = n.position; });
+    savedPositionsRef.current = positions; // keep ref in sync
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ positions }));
   }, []);
 
@@ -292,13 +305,74 @@ const RoadmapGraphContent: React.FC<RoadmapGraphProps> = ({
   );
 
   const onConnect: OnConnect = useCallback(
-    (params: Connection) => setEdges((eds) => addEdge({ ...params, style: { stroke: '#8B6914', strokeWidth: 2.5 } }, eds)), []
+    (params: Connection) => {
+      const targetMilestone = milestones.find(m => m.id === params.target);
+      if (targetMilestone && onUpdateMilestone) {
+        const newParents = Array.from(new Set([...(targetMilestone.parentIds || []), params.source])) as string[];
+        onUpdateMilestone(params.target || '', { parentIds: newParents });
+      }
+      setEdges((eds) => addEdge({ ...params, style: { stroke: '#8B6914', strokeWidth: 2.5 } }, eds));
+    }
+    , [milestones, onUpdateMilestone]
   );
 
-  // Delete edge on click in edit mode
-  const onEdgeClick = useCallback((_: any, edge: Edge) => {
-    if (isEditMode) setEdges((eds) => eds.filter((e) => e.id !== edge.id));
-  }, [isEditMode]);
+  // Delete edge on double click in edit mode
+  const onEdgeDoubleClick = useCallback((_: any, edge: Edge) => {
+    if (isEditMode) {
+        const targetMilestone = milestones.find(m => m.id === edge.target);
+        if (targetMilestone && onUpdateMilestone) {
+            const newParents = (targetMilestone.parentIds || []).filter((id: string) => id !== edge.source);
+            onUpdateMilestone(edge.target, { parentIds: newParents });
+        }
+        setEdges((eds) => eds.filter((e) => e.id !== edge.id));
+    }
+  }, [isEditMode, milestones, onUpdateMilestone]);
+
+  // Fix: inline all DB logic directly so no stale-closure issues
+  const onReconnect: OnReconnect = useCallback(
+    (oldEdge, newConnection) => {
+      // 1. Update visual state
+      setEdges((els) => reconnectEdge(oldEdge, newConnection, els));
+
+      if (!onUpdateMilestone) return;
+
+      // 2. Update backend — target changed (arrowhead dragged to new node)
+      if (oldEdge.target !== newConnection.target) {
+        // Remove source from old target's parentIds
+        const oldTarget = milestones.find(m => m.id === oldEdge.target);
+        if (oldTarget) {
+          const newParents = (oldTarget.parentIds || []).filter((id: string) => id !== oldEdge.source);
+          onUpdateMilestone(oldEdge.target, { parentIds: newParents }).catch((e: any) =>
+            console.error('Failed to remove old parent link', e)
+          );
+        }
+        // Add source to new target's parentIds
+        const newTarget = milestones.find(m => m.id === newConnection.target);
+        if (newTarget && newConnection.target) {
+          const newParents = Array.from(
+            new Set([...(newTarget.parentIds || []), newConnection.source])
+          ) as string[];
+          onUpdateMilestone(newConnection.target, { parentIds: newParents }).catch((e: any) =>
+            console.error('Failed to add new parent link', e)
+          );
+        }
+      }
+      // 3. Update backend — source changed (tail dragged to new node)
+      else if (oldEdge.source !== newConnection.source) {
+        const target = milestones.find(m => m.id === oldEdge.target);
+        if (target) {
+          const newParents = (target.parentIds || []).map((id: string) =>
+            id === oldEdge.source ? newConnection.source : id
+          ) as string[];
+          onUpdateMilestone(oldEdge.target, { parentIds: newParents }).catch((e: any) =>
+            console.error('Failed to swap parent link', e)
+          );
+        }
+      }
+    },
+    [milestones, onUpdateMilestone]
+  );
+
 
   const predictiveETA = useMemo(() => {
     return calculatePredictiveETA(milestones);
@@ -325,23 +399,25 @@ const RoadmapGraphContent: React.FC<RoadmapGraphProps> = ({
         nodes={nodes} edges={edges}
         onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onReconnect={onReconnect}
         onNodeClick={onNodeClick}
         onNodeDoubleClick={onNodeDoubleClick}
-        onEdgeClick={onEdgeClick}
+        onEdgeDoubleClick={onEdgeDoubleClick}
         nodeTypes={nodeTypes}
         fitView
         nodesDraggable={isEditMode}
         nodesConnectable={isEditMode}
+        edgesReconnectable={isEditMode}
         elementsSelectable={isEditMode}
         edgesFocusable={isEditMode}
+        connectionMode={ConnectionMode.Loose}
+        connectionLineStyle={{ stroke: '#00f2ea', strokeWidth: 3 }}
+        snapToGrid={true}
+        snapGrid={[20, 20]}
         style={{ zIndex: 2 }}
       >
         <Controls showInteractive={false} />
       </ReactFlow>
-
-      <div className="architect-plaque">
-        <span className="architect-plaque-text">Open Architect Studio</span>
-      </div>
 
       {/* Add node button — only in edit mode */}
       {isEditMode && (
@@ -355,6 +431,36 @@ const RoadmapGraphContent: React.FC<RoadmapGraphProps> = ({
         >
           <Plus size={16} /> Add New Milestone
         </button>
+      )}
+
+      {/* Edit-mode edge hints */}
+      {isEditMode && (
+        <div style={{
+          position: 'absolute', top: 72, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 50, display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center',
+          pointerEvents: 'none',
+        }}>
+          {[
+            { icon: '⊕', text: 'Drag ● → ● to link nodes' },
+            { icon: '↔', text: 'Drag edge endpoint to reconnect' },
+            { icon: '✕', text: 'Double-click edge to delete' },
+          ].map((hint) => (
+            <span
+              key={hint.text}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '4px 12px', borderRadius: 20,
+                background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(0,242,234,0.25)',
+                backdropFilter: 'blur(6px)',
+                fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600,
+                color: 'rgba(0,242,234,0.8)', letterSpacing: '0.3px',
+              }}
+            >
+              <span style={{ fontSize: 12, color: '#00f2ea' }}>{hint.icon}</span>
+              {hint.text}
+            </span>
+          ))}
+        </div>
       )}
 
       {/* === CONFIRM POPUP (Architecture mode) === */}
@@ -485,10 +591,39 @@ const RoadmapGraphContent: React.FC<RoadmapGraphProps> = ({
   );
 };
 
-const RoadmapGraph: React.FC<RoadmapGraphProps> = (props) => (
-  <ReactFlowProvider>
-    <RoadmapGraphContent {...props} />
-  </ReactFlowProvider>
-);
+const RoadmapGraph: React.FC<RoadmapGraphProps> = (props) => {
+  const [isMobile, setIsMobile] = React.useState(() => window.innerWidth < 768);
+  // Mobile edit mode state — must be at top level (Rules of Hooks)
+  const [mobileEditMode, setMobileEditMode] = React.useState(false);
+
+  React.useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+
+  // Mobile: render the beautiful touchable card timeline
+  if (isMobile) {
+    return (
+      <MobileRoadmapView
+        milestones={props.milestones}
+        isEditMode={mobileEditMode}
+        isSaving={false}
+        onToggleEdit={() => setMobileEditMode(e => !e)}
+        onCompleteMilestone={props.onCompleteMilestone || (() => {})}
+        onUpdateMilestone={props.onUpdateMilestone || (async () => {})}
+        onDeleteMilestone={props.onDeleteMilestone || (async () => {})}
+        onAddMilestone={props.onAddMilestone || (async () => {})}
+      />
+    );
+  }
+
+  // Desktop: full React Flow canvas
+  return (
+    <ReactFlowProvider>
+      <RoadmapGraphContent {...props} />
+    </ReactFlowProvider>
+  );
+};
 
 export default RoadmapGraph;
