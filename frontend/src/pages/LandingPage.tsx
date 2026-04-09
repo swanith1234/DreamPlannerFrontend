@@ -67,6 +67,7 @@ const LandingPage: React.FC = () => {
 
                 {/* Content */}
                 <div className={styles.content}>
+
                     <motion.h1
                         className={styles.headline}
                         initial={{ opacity: 0, y: 50 }}

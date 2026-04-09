@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { RiNotification3Line, RiVolumeUpLine, RiMoonLine } from 'react-icons/ri';
+import { isNativeApp } from '../utils/platform';
+import { PushNotifications } from '@capacitor/push-notifications';
 import api from '../api/client';
 import GlassCard from '../components/GlassCard';
 import PageTransition from '../components/PageTransition';
 import PageLoader from '../components/PageLoader';
 
 const SettingsPage: React.FC = () => {
-    const [tone, setTone] = useState<'friendly' | 'stoic' | 'harsh' | 'positive' | 'fear'>('friendly');
+    const [tone, setTone] = useState<'NEUTRAL' | 'LOGICAL' | 'HARSH' | 'POSITIVE' | 'OPTIMISTIC' | 'FEAR'>('NEUTRAL');
     const [notifications, setNotifications] = useState(true);
     const [particles, setParticles] = useState(true);
 
@@ -14,7 +16,59 @@ const SettingsPage: React.FC = () => {
     const [sleepStart, setSleepStart] = useState('23:00');
     const [sleepEnd, setSleepEnd] = useState('07:00');
     const [notificationFrequency, setNotificationFrequency] = useState(60);
+    const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
     const [isSaving, setIsSaving] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
+    const [agentName, setAgentName] = useState('');
+    const [preferredName, setPreferredName] = useState('');
+
+    React.useEffect(() => {
+        const fetchPreferences = async () => {
+            try {
+                const { data } = await api.get('/users/preferences');
+                if (data) {
+                    setTone(data.motivationTone || 'NEUTRAL');
+                    setNotificationFrequency(data.notificationFrequency || 60);
+                    setSleepStart(data.sleepStart || '23:00');
+                    setSleepEnd(data.sleepEnd || '07:00');
+                    setAgentName(data.agentName || '');
+                    setPreferredName(data.preferredName || '');
+                }
+                // Separately fetch user profile for timezone
+                try {
+                    const { data: me } = await api.get('/auth/me');
+                    const storedTz = me?.user?.timezone;
+                    const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                    if (!storedTz || storedTz === 'UTC') {
+                        // Auto-fix: patch the backend with the correct timezone
+                        await api.put('/users/profile', { timezone: browserTz });
+                        setTimezone(browserTz);
+                    } else {
+                        setTimezone(storedTz);
+                    }
+                } catch { /* profile fetch failed, keep browser default */ }
+            } catch (error) {
+                console.error("Failed to fetch preferences", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        const checkPushStatus = async () => {
+            if (isNativeApp) {
+                const permStatus = await PushNotifications.checkPermissions();
+                setNotifications(permStatus.receive === 'granted');
+                return;
+            }
+            if ('serviceWorker' in navigator) {
+                const registration = await navigator.serviceWorker.ready;
+                const subscription = await registration.pushManager.getSubscription();
+                setNotifications(!!subscription);
+            }
+        }
+        fetchPreferences();
+        checkPushStatus();
+    }, []);
 
     const Toggle = ({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) => (
         <div
@@ -37,13 +91,16 @@ const SettingsPage: React.FC = () => {
         setIsSaving(true);
         try {
             await api.put('/users/preferences', {
-                motivationTone: tone.toUpperCase(),
+                motivationTone: tone,
                 notificationFrequency,
                 sleepStart,
                 sleepEnd,
-                quietHours: [] // Default empty for now, can add UI later
+                quietHours: [],
+                agentName,
+                preferredName
             });
-            // Show toast or success
+            // Also save timezone
+            await api.put('/users/profile', { timezone });
             alert('Settings saved!');
         } catch (error) {
             console.error('Failed to save settings', error);
@@ -53,10 +110,12 @@ const SettingsPage: React.FC = () => {
         }
     };
 
+    if (isLoading) return <PageLoader />;
+
     return (
         <PageTransition>
             {isSaving && <PageLoader />}
-            <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+            <div style={{ maxWidth: '600px', margin: '0 auto', paddingBottom: '120px' }}>
                 <h2 style={{ marginBottom: '32px' }}>System Configuration</h2>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -71,19 +130,20 @@ const SettingsPage: React.FC = () => {
                             </div>
                         </div>
                         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                            {['Friendly', 'Stoic', 'Harsh', 'Positive', 'Fear'].map((t) => (
+                            {['NEUTRAL', 'LOGICAL', 'HARSH', 'POSITIVE', 'OPTIMISTIC', 'FEAR'].map((t) => (
                                 <button
                                     key={t}
-                                    onClick={() => setTone(t.toLowerCase() as any)}
+                                    onClick={() => setTone(t as any)}
                                     style={{
                                         flex: 1, padding: '12px', borderRadius: '8px',
-                                        border: `1px solid ${tone === t.toLowerCase() ? 'var(--color-accent)' : 'rgba(255,255,255,0.1)'}`,
-                                        background: tone === t.toLowerCase() ? 'rgba(0, 242, 234, 0.1)' : 'transparent',
-                                        color: tone === t.toLowerCase() ? 'var(--color-accent)' : 'var(--color-text-secondary)',
-                                        cursor: 'pointer', transition: 'all 0.3s'
+                                        border: `1px solid ${tone === t ? 'var(--color-accent)' : 'rgba(255,255,255,0.1)'}`,
+                                        background: tone === t ? 'rgba(0, 242, 234, 0.1)' : 'transparent',
+                                        color: tone === t ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+                                        cursor: 'pointer', transition: 'all 0.3s',
+                                        textTransform: 'capitalize'
                                     }}
                                 >
-                                    {t}
+                                    {t.toLowerCase()}
                                 </button>
                             ))}
                         </div>
@@ -98,7 +158,102 @@ const SettingsPage: React.FC = () => {
                                 <p style={{ fontSize: '0.9rem', color: 'var(--color-text-secondary)' }}>Enable system nudges</p>
                             </div>
                         </div>
-                        <Toggle checked={notifications} onChange={setNotifications} />
+                        <Toggle
+                            checked={notifications}
+                            onChange={async (newState) => {
+                                try {
+                                    setNotifications(newState);
+                                    if (newState) {
+                                        // ENABLE: Request permission & Subscribe
+                                        if (isNativeApp) {
+                                            let permStatus = await PushNotifications.checkPermissions();
+                                            if (permStatus.receive === 'prompt') {
+                                                permStatus = await PushNotifications.requestPermissions();
+                                            }
+                                            if (permStatus.receive !== 'granted') {
+                                                setNotifications(false);
+                                                alert("Permission denied. Please enable notifications in your phone settings.");
+                                                return;
+                                            }
+                                            await PushNotifications.register();
+                                            alert("Notifications enabled successfully!");
+                                            return;
+                                        }
+
+                                        if (!('Notification' in window)) {
+                                            alert("Notifications are not supported in this browser.");
+                                            return;
+                                        }
+                                        const permission = await Notification.requestPermission();
+                                        if (permission === 'granted') {
+                                            if ('serviceWorker' in navigator) {
+                                                // Ensure SW is registered
+                                                let registration = await navigator.serviceWorker.getRegistration();
+                                                if (!registration) {
+                                                    console.log("Registering new Service Worker...");
+                                                    registration = await navigator.serviceWorker.register('/sw.js');
+                                                }
+
+                                                // Wait for it to be active
+                                                await navigator.serviceWorker.ready;
+
+                                                // 1. Get VAPID Key
+                                                const { data } = await api.get('/notifications/vapid-key');
+                                                if (!data || !data.publicKey) {
+                                                    throw new Error("Failed to get VAPID Key from server");
+                                                }
+                                                const { publicKey } = data;
+
+                                                // 2. Helper to convert key
+                                                const urlBase64ToUint8Array = (base64String: string) => {
+                                                    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+                                                    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+                                                    const rawData = window.atob(base64);
+                                                    const outputArray = new Uint8Array(rawData.length);
+                                                    for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+                                                    return outputArray;
+                                                }
+
+                                                // 3. Subscribe
+                                                console.log("Subscribing to push manager...");
+                                                const subscription = await registration.pushManager.subscribe({
+                                                    userVisibleOnly: true,
+                                                    applicationServerKey: urlBase64ToUint8Array(publicKey)
+                                                });
+
+                                                // 4. Send to Backend
+                                                console.log("Sending subscription to backend...", subscription);
+                                                await api.post('/notifications/subscribe', subscription);
+                                                alert("Notifications enabled successfully!");
+                                            } else {
+                                                alert("Service Worker not supported or not ready.");
+                                            }
+                                        } else {
+                                            setNotifications(false); // Denied
+                                            alert("Permission denied. Please enable notifications in your browser settings.");
+                                        }
+                                    } else {
+                                        // DISABLE: Unsubscribe
+                                        if (isNativeApp) {
+                                            alert("To fully disable push notifications, please disable them in your android application settings under Apps -> IgniteMate.");
+                                            return;
+                                        }
+                                        if ('serviceWorker' in navigator) {
+                                            const registration = await navigator.serviceWorker.ready;
+                                            const subscription = await registration.pushManager.getSubscription();
+                                            if (subscription) {
+                                                await subscription.unsubscribe();
+                                                await api.post('/notifications/unsubscribe', { endpoint: subscription.endpoint });
+                                            }
+                                        }
+                                    }
+                                } catch (err: any) {
+                                    console.error("Notification toggle error:", err);
+                                    setNotifications(!newState); // Revert state
+                                    alert(`Failed to change notification settings: ${err.message}`);
+                                }
+                            }}
+                        />
                     </GlassCard>
 
                     {/* Schedule Section */}
@@ -143,15 +298,15 @@ const SettingsPage: React.FC = () => {
                         </div>
                         <input
                             type="range"
-                            min="15"
-                            max="240"
-                            step="15"
+                            min="60"
+                            max="1440"
+                            step="60"
                             value={notificationFrequency}
                             onChange={(e) => setNotificationFrequency(parseInt(e.target.value))}
                             style={{ width: '100%', accentColor: 'var(--color-accent)' }}
                         />
                         <div style={{ textAlign: 'right', marginTop: '8px', color: 'var(--color-accent)' }}>
-                            Every {notificationFrequency} minutes
+                            Every {notificationFrequency / 60} {notificationFrequency / 60 === 1 ? 'hour' : 'hours'}
                         </div>
                     </GlassCard>
 
@@ -165,6 +320,39 @@ const SettingsPage: React.FC = () => {
                             </div>
                         </div>
                         <Toggle checked={particles} onChange={setParticles} />
+                    </GlassCard>
+
+                    {/* AI Identity Section */}
+                    <GlassCard>
+                        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+                            <RiVolumeUpLine style={{ fontSize: '1.5rem', marginRight: '16px', color: 'var(--color-accent)' }} />
+                            <div>
+                                <h3 style={{ fontSize: '1.1rem' }}>AI Identity & Addressing</h3>
+                                <p style={{ fontSize: '0.9rem', color: 'var(--color-text-secondary)' }}>Personalize how the AI interacts with you</p>
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '24px', flexDirection: 'column' }}>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem' }}>Agent Name (e.g. "Future Jarvis")</label>
+                                <input
+                                    type="text"
+                                    placeholder="Leave blank for default"
+                                    value={agentName}
+                                    onChange={(e) => setAgentName(e.target.value)}
+                                    style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none' }}
+                                />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem' }}>How should the agent address you?</label>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. Boss, Captain, Tony"
+                                    value={preferredName}
+                                    onChange={(e) => setPreferredName(e.target.value)}
+                                    style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none' }}
+                                />
+                            </div>
+                        </div>
                     </GlassCard>
 
                 </div>

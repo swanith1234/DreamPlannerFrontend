@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RiAddLine, RiTimeLine, RiFireLine, RiEditLine, RiDeleteBinLine } from 'react-icons/ri';
+import { RiAddLine, RiTimeLine, RiFireLine, RiEditLine, RiDeleteBinLine, RiRoadMapLine } from 'react-icons/ri';
 import api from '../api/client';
 import GlassCard from '../components/GlassCard';
 import GlowButton from '../components/GlowButton';
@@ -11,12 +12,17 @@ interface Dream {
     id: string;
     title: string;
     description: string;
+    domain?: string;
+    targetGoal?: string;
+    currentSkillLevel?: string;
     motivationStatement: string;
     deadline: string;
     impactScore: number;
+    additionalContext?: string;
 }
 
 const DreamsPage: React.FC = () => {
+    const navigate = useNavigate();
     const [dreams, setDreams] = useState<Dream[]>([]);
     const [showCreate, setShowCreate] = useState(false);
     const [showEdit, setShowEdit] = useState(false);
@@ -25,10 +31,14 @@ const DreamsPage: React.FC = () => {
 
     // Form State
     const [title, setTitle] = useState('');
+    const [domain, setDomain] = useState('');
+    const [targetGoal, setTargetGoal] = useState('');
+    const [currentSkillLevel, setCurrentSkillLevel] = useState('');
     const [description, setDescription] = useState('');
     const [motivation, setMotivation] = useState('');
     const [deadline, setDeadline] = useState('');
     const [impactScore, setImpactScore] = useState(8);
+    const [additionalContext, setAdditionalContext] = useState('');
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
@@ -51,16 +61,25 @@ const DreamsPage: React.FC = () => {
         e.preventDefault();
         setLoading(true);
         try {
-            await api.post('/dreams', {
+            const res = await api.post('/dreams', {
                 title,
+                domain,
+                targetGoal,
+                currentSkillLevel,
                 description,
                 motivationStatement: motivation,
                 deadline: new Date(deadline).toISOString(),
-                impactScore: impactScore
+                impactScore: impactScore,
+                additionalContext
             });
             setShowCreate(false);
             resetForm();
             fetchDreams();
+            const createdDreamId = res.data?.id;
+            if (createdDreamId) {
+                // Immediately suggest/generate roadmap on dedicated page (draft first)
+                navigate(`/app/dreams/${createdDreamId}/roadmap`);
+            }
         } catch (error) {
             console.error("Failed to create dream", error);
         } finally {
@@ -70,20 +89,28 @@ const DreamsPage: React.FC = () => {
 
     const resetForm = () => {
         setTitle('');
+        setDomain('');
+        setTargetGoal('');
+        setCurrentSkillLevel('');
         setDescription('');
         setMotivation('');
         setDeadline('');
         setImpactScore(8);
+        setAdditionalContext('');
         setSelectedDream(null);
     };
 
     const openEdit = (dream: Dream) => {
         setSelectedDream(dream);
         setTitle(dream.title);
+        setDomain(dream.domain || '');
+        setTargetGoal(dream.targetGoal || '');
+        setCurrentSkillLevel(dream.currentSkillLevel || '');
         setDescription(dream.description);
         setMotivation(dream.motivationStatement);
         setDeadline(dream.deadline ? new Date(dream.deadline).toISOString().split('T')[0] : '');
         setImpactScore(dream.impactScore);
+        setAdditionalContext(dream.additionalContext || '');
         setShowEdit(true);
     };
 
@@ -94,10 +121,14 @@ const DreamsPage: React.FC = () => {
         try {
             await api.put(`/dreams/${selectedDream.id}`, {
                 title,
+                domain,
+                targetGoal,
+                currentSkillLevel,
                 description,
                 motivationStatement: motivation,
                 deadline: new Date(deadline).toISOString(),
-                impactScore: impactScore
+                impactScore: impactScore,
+                additionalContext
             });
             setShowEdit(false);
             resetForm();
@@ -189,10 +220,17 @@ const DreamsPage: React.FC = () => {
                                     <RiFireLine />
                                     <span>"{dream.motivationStatement}"</span>
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '16px' }}>
                                     <RiTimeLine />
                                     <span>{new Date(dream.deadline).toLocaleDateString()}</span>
                                 </div>
+                                <GlowButton 
+                                    variant="ghost" 
+                                    onClick={() => navigate(`/app/dreams/${dream.id}/roadmap`)}
+                                    style={{ width: '100%', justifyContent: 'center', fontSize: '0.85rem' }}
+                                >
+                                    <RiRoadMapLine style={{ marginRight: '8px' }} /> View Roadmap
+                                </GlowButton>
                             </div>
                         </GlassCard>
                     ))}
@@ -222,7 +260,14 @@ const DreamsPage: React.FC = () => {
                             onClick={() => setShowCreate(false)}
                         >
                             <GlassCard
-                                style={{ width: '100%', maxWidth: '500px' }}
+                                style={{ 
+                                    width: '100%', 
+                                    maxWidth: '550px', 
+                                    maxHeight: '85vh', 
+                                    overflowY: 'auto',
+                                    paddingRight: '12px'
+                                }}
+                                className="custom-scrollbar"
                                 onClick={(e) => e.stopPropagation()}
                                 initial={{ scale: 0.9, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
@@ -249,6 +294,48 @@ const DreamsPage: React.FC = () => {
                                             placeholder="What is this dream about?"
                                             rows={3}
                                             required
+                                        />
+                                    </div>
+                                    <div style={{ marginBottom: '16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                        <div>
+                                            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem' }}>Domain</label>
+                                            <input
+                                                style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none' }}
+                                                value={domain}
+                                                onChange={e => setDomain(e.target.value)}
+                                                placeholder="e.g. Physics, Coding"
+                                                required
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem' }}>Current Skill Level</label>
+                                            <input
+                                                style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none' }}
+                                                value={currentSkillLevel}
+                                                onChange={e => setCurrentSkillLevel(e.target.value)}
+                                                placeholder="e.g. Beginner in Python, but expert in C++"
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+                                    <div style={{ marginBottom: '16px' }}>
+                                        <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem' }}>Target Goal</label>
+                                        <input
+                                            style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none' }}
+                                            value={targetGoal}
+                                            onChange={e => setTargetGoal(e.target.value)}
+                                            placeholder="What exactly do you want to achieve?"
+                                            required
+                                        />
+                                    </div>
+                                    <div style={{ marginBottom: '16px' }}>
+                                        <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem' }}>Additional Context</label>
+                                        <textarea
+                                            style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none', resize: 'vertical' }}
+                                            value={additionalContext}
+                                            onChange={e => setAdditionalContext(e.target.value)}
+                                            placeholder="Any other details that might help the AI?"
+                                            rows={2}
                                         />
                                     </div>
                                     <div style={{ marginBottom: '16px' }}>
@@ -315,7 +402,14 @@ const DreamsPage: React.FC = () => {
                             onClick={() => setShowEdit(false)}
                         >
                             <GlassCard
-                                style={{ width: '100%', maxWidth: '500px' }}
+                                style={{ 
+                                    width: '100%', 
+                                    maxWidth: '550px', 
+                                    maxHeight: '85vh', 
+                                    overflowY: 'auto',
+                                    paddingRight: '12px' // space for scrollbar
+                                }}
+                                className="custom-scrollbar"
                                 onClick={(e) => e.stopPropagation()}
                             >
                                 <h3 style={{ marginBottom: '24px' }}>Edit Dream</h3>
@@ -337,6 +431,44 @@ const DreamsPage: React.FC = () => {
                                             onChange={e => setDescription(e.target.value)}
                                             rows={3}
                                             required
+                                        />
+                                    </div>
+                                    <div style={{ marginBottom: '16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                        <div>
+                                            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem' }}>Domain</label>
+                                            <input
+                                                style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none' }}
+                                                value={domain}
+                                                onChange={e => setDomain(e.target.value)}
+                                                required
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem' }}>Current Skill Level</label>
+                                            <input
+                                                style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none' }}
+                                                value={currentSkillLevel}
+                                                onChange={e => setCurrentSkillLevel(e.target.value)}
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+                                    <div style={{ marginBottom: '16px' }}>
+                                        <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem' }}>Target Goal</label>
+                                        <input
+                                            style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none' }}
+                                            value={targetGoal}
+                                            onChange={e => setTargetGoal(e.target.value)}
+                                            required
+                                        />
+                                    </div>
+                                    <div style={{ marginBottom: '16px' }}>
+                                        <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem' }}>Additional Context</label>
+                                        <textarea
+                                            style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none', resize: 'vertical' }}
+                                            value={additionalContext}
+                                            onChange={e => setAdditionalContext(e.target.value)}
+                                            rows={2}
                                         />
                                     </div>
                                     <div style={{ marginBottom: '16px' }}>

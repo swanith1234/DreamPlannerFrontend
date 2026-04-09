@@ -95,9 +95,10 @@
     flex: 1;
     overflow-y: auto;
     padding: var(--spacing-md);
-    padding-bottom: 80px;
-    /* Space for bottom nav */
+    padding-bottom: calc(120px + env(safe-area-inset-bottom, 0px));
+    /* Extra space for bottom nav + safe area */
     position: relative;
+    -webkit-overflow-scrolling: touch;
 }
 
 .bottomNav {

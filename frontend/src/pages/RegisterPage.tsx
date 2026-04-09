@@ -12,20 +12,37 @@ const RegisterPage: React.FC = () => {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [isPasswordValid, setIsPasswordValid] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const { login } = useAuth();
     const navigate = useNavigate();
 
+    const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value;
+        setPassword(val);
+        const isValid = val.length >= 8;
+        setIsPasswordValid(isValid);
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        
+        if (!isPasswordValid) {
+            setError('Please satisfy all password requirements');
+            return;
+        }
+
         setLoading(true);
         try {
-            const { data } = await api.post('/auth/signup', { name, email, password });
-            login(data.token, data.user);
+            const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const { data } = await api.post('/auth/signup', { name, email, password, timezone });
+            login(data.user);
             navigate('/app/home');
         } catch (err: unknown) {
-            if (axios.isAxiosError(err) && err.response?.data?.message) {
+            if (axios.isAxiosError(err) && err.response?.data?.error) {
+                setError(err.response.data.error);
+            } else if (axios.isAxiosError(err) && err.response?.data?.message) {
                 setError(err.response.data.message);
             } else {
                 setError('Registration failed');
@@ -88,13 +105,29 @@ const RegisterPage: React.FC = () => {
                                 type="password"
                                 placeholder="Password"
                                 value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                style={inputStyle}
+                                onChange={handlePasswordChange}
+                                style={{ ...inputStyle, marginBottom: '8px' }}
                                 required
                             />
+                            <div style={{ 
+                                fontSize: '0.8rem', 
+                                marginBottom: '16px', 
+                                color: password.length === 0 ? 'var(--color-text-secondary)' : (isPasswordValid ? 'var(--color-success, #4ade80)' : 'var(--color-danger)') ,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                            }}>
+                                <span style={{ 
+                                    width: '6px', 
+                                    height: '6px', 
+                                    borderRadius: '50%', 
+                                    background: password.length === 0 ? 'var(--color-text-secondary)' : (isPasswordValid ? 'var(--color-success, #4ade80)' : 'var(--color-danger)') 
+                                }} />
+                                At least 8 characters
+                            </div>
                         </div>
                         <GlowButton type="submit" fullWidth>
-                            Join DreamPlanner
+                            Join IgniteMate
                         </GlowButton>
                     </form>
 

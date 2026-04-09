@@ -21,7 +21,7 @@ const LoginPage: React.FC = () => {
         setLoading(true);
         try {
             const { data } = await api.post('/auth/login', { email, password });
-            login(data.token, data.user);
+            login(data.user);
             navigate('/app/home');
         } catch (err: unknown) {
             if (axios.isAxiosError(err) && err.response?.data?.message) {
