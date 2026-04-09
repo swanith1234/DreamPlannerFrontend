@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core';
 import axios from 'axios';
 
 // In production, VITE_API_URL is set to the Render backend URL (via Vercel env vars).
@@ -12,7 +13,9 @@ const api = axios.create({
     },
 });
 
-console.log("base url", import.meta.env.VITE_API_URL);
+if (Capacitor.isNativePlatform()) {
+    alert("Mobile API Base URL: " + BASE_URL);
+}
 
 // Request interceptor: No need to attach token manually (cookies handle it)
 api.interceptors.request.use((config) => {

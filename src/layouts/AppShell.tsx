@@ -60,8 +60,8 @@ const AppShell: React.FC = () => {
                 });
 
                 PushNotifications.addListener('registration', async (token) => {
+                    alert("Native Registration Success: " + token.value.substring(0, 5) + "...");
                     try {
-                        // Store token locally for unsubscription later
                         localStorage.setItem('fcm_token_native', token.value);
                         
                         const subscriptionPayload = {
@@ -71,10 +71,19 @@ const AppShell: React.FC = () => {
                                 auth: 'NATIVE'
                             }
                         };
+                        console.log("Syncing token to backend...", subscriptionPayload);
+                        alert("Syncing to backend: " + api.defaults.baseURL);
                         await api.post('/notifications/subscribe', subscriptionPayload);
-                    } catch (err) {
+                        alert("Sync successful! Entry created in DB.");
+                    } catch (err: any) {
+                        const errMsg = err.response?.data?.message || err.message || "Unknown Network Error";
+                        alert("Sync Failed: " + errMsg);
                         console.error("Failed to sync Native FCM token", err);
                     }
+                });
+
+                PushNotifications.addListener('registrationError', (error: any) => {
+                    alert("Native Registration Error: " + JSON.stringify(error));
                 });
 
                 PushNotifications.addListener('pushNotificationActionPerformed', async (notification) => {
@@ -209,33 +218,33 @@ const AppShell: React.FC = () => {
 
             {/* Sidebar for Desktop / Hidden on Mobile */}
             {!isNativeApp && (
-            <aside className={styles.sidebar}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: 'var(--spacing-2xl)' }}>
-                    <img src="/logo.png" alt="IgniteMate" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />
-                    <span className={styles.logo} style={{ marginBottom: 0 }}>IgniteMate</span>
-                </div>
-                <nav className={styles.nav}>
-                    {navItems.map((item) => {
-                        const isActive = location.pathname.startsWith(item.path);
-                        const Icon = isActive ? item.activeIcon : item.icon;
+                <aside className={styles.sidebar}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: 'var(--spacing-2xl)' }}>
+                        <img src="/logo.png" alt="IgniteMate" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />
+                        <span className={styles.logo} style={{ marginBottom: 0 }}>IgniteMate</span>
+                    </div>
+                    <nav className={styles.nav}>
+                        {navItems.map((item) => {
+                            const isActive = location.pathname.startsWith(item.path);
+                            const Icon = isActive ? item.activeIcon : item.icon;
 
-                        return (
-                            <button
-                                key={item.path}
-                                className={`${styles.navItem} ${isActive ? styles.active : ''}`}
-                                onClick={() => navigate(item.path)}
-                            >
-                                <Icon className={styles.icon} />
-                                <span className={styles.label}>{item.label}</span>
-                                {isActive && <motion.div layoutId="sidebar-active" className={styles.activeIndicator} />}
-                            </button>
-                        );
-                    })}
-                </nav>
-                <button className={styles.logoutBtn} onClick={handleLogout}>
-                    <RiLogoutBoxLine />
-                </button>
-            </aside>
+                            return (
+                                <button
+                                    key={item.path}
+                                    className={`${styles.navItem} ${isActive ? styles.active : ''}`}
+                                    onClick={() => navigate(item.path)}
+                                >
+                                    <Icon className={styles.icon} />
+                                    <span className={styles.label}>{item.label}</span>
+                                    {isActive && <motion.div layoutId="sidebar-active" className={styles.activeIndicator} />}
+                                </button>
+                            );
+                        })}
+                    </nav>
+                    <button className={styles.logoutBtn} onClick={handleLogout}>
+                        <RiLogoutBoxLine />
+                    </button>
+                </aside>
             )}
 
             {/* Main Content Area */}
