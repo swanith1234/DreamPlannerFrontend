@@ -16,6 +16,7 @@ import {
     RiRoadMapLine
 } from 'react-icons/ri';
 import { useAuth } from '../context/AuthContext';
+import { isNativeApp } from '../utils/platform';
 import styles from './AppShell.module.css';
 
 const AppShell: React.FC = () => {
@@ -148,6 +149,7 @@ const AppShell: React.FC = () => {
             </AnimatePresence>
 
             {/* Sidebar for Desktop / Hidden on Mobile */}
+            {!isNativeApp && (
             <aside className={styles.sidebar}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: 'var(--spacing-2xl)' }}>
                     <img src="/logo.png" alt="IgniteMate" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />
@@ -175,6 +177,7 @@ const AppShell: React.FC = () => {
                     <RiLogoutBoxLine />
                 </button>
             </aside>
+            )}
 
             {/* Main Content Area */}
             <main className={styles.main} style={{ paddingTop: showNotifBanner ? '40px' : '0', transition: 'padding-top 0.3s' }}>
