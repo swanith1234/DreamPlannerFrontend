@@ -15,6 +15,8 @@ import {
     RiLogoutBoxLine,
     RiRoadMapLine
 } from 'react-icons/ri';
+import { PushNotifications } from '@capacitor/push-notifications';
+import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { isNativeApp } from '../utils/platform';
 import styles from './AppShell.module.css';
@@ -28,14 +30,63 @@ const AppShell: React.FC = () => {
     // Corrected Notification Session Logic
     useEffect(() => {
         const hasAskedThisSession = sessionStorage.getItem('asked_notifications');
-        if ('Notification' in window && Notification.permission === 'default' && !hasAskedThisSession) {
+        if ('Notification' in window && Notification.permission === 'default' && !hasAskedThisSession && !isNativeApp) {
             const timer = setTimeout(() => {
                 setShowNotifBanner(true);
                 sessionStorage.setItem('asked_notifications', 'true');
             }, 2000);
             return () => clearTimeout(timer);
         }
-    }, []);
+
+        if (isNativeApp) {
+            const setupNativePush = async () => {
+                // Register Action Types (WhatsApp-style inline reply)
+                // @ts-ignore - Some versions of capacitor/push-notifications omit this from types
+                await PushNotifications.registerActionTypes({
+                    types: [
+                        {
+                            id: 'inline_reply',
+                            actions: [
+                                {
+                                    id: 'reply',
+                                    title: 'Reply',
+                                    input: true,
+                                    inputPlaceholder: 'Type a message...',
+                                    inputButtonTitle: 'Send'
+                                }
+                            ]
+                        }
+                    ]
+                });
+
+                PushNotifications.addListener('registration', async (token) => {
+                    try {
+                        const subscriptionPayload = {
+                            endpoint: token.value,
+                            keys: {
+                                p256dh: 'NATIVE',
+                                auth: 'NATIVE'
+                            }
+                        };
+                        await api.post('/notifications/subscribe', subscriptionPayload);
+                    } catch (err) {
+                        console.error("Failed to sync Native FCM token", err);
+                    }
+                });
+
+                PushNotifications.addListener('pushNotificationActionPerformed', async (notification) => {
+                    if (notification.actionId === 'reply' && notification.inputValue) {
+                        try {
+                            await api.post('/chat', { message: notification.inputValue });
+                        } catch (e) {
+                            console.error("Failed to send silent chat reply", e);
+                        }
+                    }
+                });
+            };
+            setupNativePush();
+        }
+    }, [isNativeApp]);
 
     /*
     const urlBase64ToUint8Array = (base64String: string) => {

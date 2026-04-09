@@ -12,6 +12,7 @@
   "dependencies": {
     "@capacitor/android": "^8.3.0",
     "@capacitor/core": "^8.3.0",
+    "@capacitor/push-notifications": "^8.0.3",
     "@xyflow/react": "^12.10.1",
     "axios": "^1.13.2",
     "font-face": "^2.3.4",

@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { RiNotification3Line, RiVolumeUpLine, RiMoonLine } from 'react-icons/ri';
+import { isNativeApp } from '../utils/platform';
+import { PushNotifications } from '@capacitor/push-notifications';
 import api from '../api/client';
 import GlassCard from '../components/GlassCard';
 import PageTransition from '../components/PageTransition';
@@ -53,13 +55,15 @@ const SettingsPage: React.FC = () => {
         };
 
         const checkPushStatus = async () => {
+            if (isNativeApp) {
+                const permStatus = await PushNotifications.checkPermissions();
+                setNotifications(permStatus.receive === 'granted');
+                return;
+            }
             if ('serviceWorker' in navigator) {
                 const registration = await navigator.serviceWorker.ready;
                 const subscription = await registration.pushManager.getSubscription();
                 setNotifications(!!subscription);
-
-                // Double check with backend if really needed, but local subscription existence is a good proxy.
-                // Ideally we verify if the backend also has it.
             }
         }
         fetchPreferences();
@@ -161,6 +165,21 @@ const SettingsPage: React.FC = () => {
                                     setNotifications(newState);
                                     if (newState) {
                                         // ENABLE: Request permission & Subscribe
+                                        if (isNativeApp) {
+                                            let permStatus = await PushNotifications.checkPermissions();
+                                            if (permStatus.receive === 'prompt') {
+                                                permStatus = await PushNotifications.requestPermissions();
+                                            }
+                                            if (permStatus.receive !== 'granted') {
+                                                setNotifications(false);
+                                                alert("Permission denied. Please enable notifications in your phone settings.");
+                                                return;
+                                            }
+                                            await PushNotifications.register();
+                                            alert("Notifications enabled successfully!");
+                                            return;
+                                        }
+
                                         if (!('Notification' in window)) {
                                             alert("Notifications are not supported in this browser.");
                                             return;
@@ -215,6 +234,10 @@ const SettingsPage: React.FC = () => {
                                         }
                                     } else {
                                         // DISABLE: Unsubscribe
+                                        if (isNativeApp) {
+                                            alert("To fully disable push notifications, please disable them in your android application settings under Apps -> IgniteMate.");
+                                            return;
+                                        }
                                         if ('serviceWorker' in navigator) {
                                             const registration = await navigator.serviceWorker.ready;
                                             const subscription = await registration.pushManager.getSubscription();
