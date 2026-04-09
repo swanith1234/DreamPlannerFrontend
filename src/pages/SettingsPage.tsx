@@ -235,7 +235,13 @@ const SettingsPage: React.FC = () => {
                                     } else {
                                         // DISABLE: Unsubscribe
                                         if (isNativeApp) {
-                                            alert("To fully disable push notifications, please disable them in your android application settings under Apps -> IgniteMate.");
+                                            const savedToken = localStorage.getItem('fcm_token_native');
+                                            if (savedToken) {
+                                                console.log("Unsubscribing native push...", savedToken);
+                                                await api.post('/notifications/unsubscribe', { endpoint: savedToken });
+                                                localStorage.removeItem('fcm_token_native');
+                                            }
+                                            alert("Push notifications disabled.");
                                             return;
                                         }
                                         if ('serviceWorker' in navigator) {

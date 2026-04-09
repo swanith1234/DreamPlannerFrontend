@@ -61,6 +61,9 @@ const AppShell: React.FC = () => {
 
                 PushNotifications.addListener('registration', async (token) => {
                     try {
+                        // Store token locally for unsubscription later
+                        localStorage.setItem('fcm_token_native', token.value);
+                        
                         const subscriptionPayload = {
                             endpoint: token.value,
                             keys: {
@@ -83,6 +86,11 @@ const AppShell: React.FC = () => {
                         }
                     }
                 });
+                // Auto-register if permission already granted to ensure token is synced
+                const permStatus = await PushNotifications.checkPermissions();
+                if (permStatus.receive === 'granted') {
+                    await PushNotifications.register();
+                }
             };
             setupNativePush();
         }
