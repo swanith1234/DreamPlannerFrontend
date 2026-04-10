@@ -3,7 +3,15 @@ import axios from 'axios';
 
 // In production, VITE_API_URL is set to the Render backend URL (via Vercel env vars).
 // Locally, it's empty — we rely on Vite's dev server proxy (/api -> http://localhost:3000).
-const BASE_URL = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
+// For native mobile (Capacitor), we MUST use the full backend URL since there's no proxy.
+const RENDER_BACKEND = 'https://dreamplanner-lbm7.onrender.com';
+
+let BASE_URL: string;
+if (Capacitor.isNativePlatform()) {
+    BASE_URL = `${RENDER_BACKEND}/api`;
+} else {
+    BASE_URL = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
+}
 
 const api = axios.create({
     baseURL: BASE_URL,
@@ -13,9 +21,7 @@ const api = axios.create({
     },
 });
 
-if (Capacitor.isNativePlatform()) {
-    alert("Mobile API Base URL: " + BASE_URL);
-}
+console.log("API Base URL:", BASE_URL);
 
 // Request interceptor: No need to attach token manually (cookies handle it)
 api.interceptors.request.use((config) => {
