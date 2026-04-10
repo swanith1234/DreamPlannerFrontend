@@ -176,9 +176,28 @@ const SettingsPage: React.FC = () => {
                                                     alert("Permission denied. Please enable notifications in your phone settings.");
                                                     return;
                                                 }
-                                                alert("Requesting Push Register...");
-                                                await PushNotifications.register();
-                                                alert("Register call finished. Check for registration success alert.");
+
+                                                // Get the FCM token by listening for the registration event inline
+                                                const token = await new Promise<string>((resolve, reject) => {
+                                                    PushNotifications.addListener('registration', (t) => {
+                                                        resolve(t.value);
+                                                    });
+                                                    PushNotifications.addListener('registrationError', (err) => {
+                                                        reject(new Error(JSON.stringify(err)));
+                                                    });
+                                                    PushNotifications.register();
+                                                });
+
+                                                // Save locally for unsubscribe later
+                                                localStorage.setItem('fcm_token_native', token);
+
+                                                // Send to backend
+                                                await api.post('/notifications/subscribe', {
+                                                    endpoint: token,
+                                                    keys: { p256dh: 'NATIVE', auth: 'NATIVE' }
+                                                });
+
+                                                alert("Notifications enabled! Token synced to backend.");
                                             } catch (err: any) {
                                                 alert("Enable failed: " + (err.message || "Unknown error"));
                                                 setNotifications(false);
