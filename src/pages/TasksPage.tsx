@@ -14,6 +14,7 @@ interface Task {
     deadline: string;
     priority: number;
     status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
+    progressPercent?: number;
 }
 
 interface Dream {
@@ -135,13 +136,18 @@ const TasksPage: React.FC = () => {
 
     // Group tasks by dream if needed, or just list them. 
     // Requirement says "Grouped by Dream".
+    const getTasksByFilter = (tasksList: Task[]) => tasksList.filter(t => {
+        const progress = t.progressPercent || 0;
+        if (filter === 'PENDING') return progress === 0;
+        if (filter === 'IN_PROGRESS') return progress > 0 && progress < 100;
+        if (filter === 'COMPLETED') return progress === 100;
+        return false;
+    });
+
     const groupedTasks = dreams.map(dream => ({
         ...dream,
-        tasks: tasks.filter(t => t.status === filter && tasks.find(task => task.id === t.id)) // Real filtering logic depends on if API returns dreamId in task
-        // Since I don't see dreamId in Task interface from my previous read, I'll need to check the API response or assume it's there.
-        // The previous context "Create Task" payload had dreamId. So Task object should have it.
-        // I'll assume task.dreamId exists.
-    })).filter(group => tasks.some(t => (t as any).dreamId === group.id && t.status === filter));
+        tasks: getTasksByFilter(tasks).filter(t => (t as any).dreamId === dream.id)
+    })).filter(group => group.tasks.length > 0);
 
     // Fallback if no specific relation shown in UI easily without dreamId in task object
     // For now I'll trust the plan and assume.

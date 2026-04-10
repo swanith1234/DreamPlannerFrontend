@@ -175,10 +175,10 @@ const HomePage: React.FC = () => {
                  const pName = prefs?.preferredName || userName;
                  setAgentName(aName);
 
-                 const { data } = await api.get('/chat/history', { params: { limit: 20 } });
+                 const { data } = await api.get('/chat/history', { params: { limit: 30 } });
                  if (data && data.length > 0) {
                      setMessages(data);
-                     setHasMore(data.length === 20);
+                     setHasMore(data.length === 30);
                      api.patch('/chat/seen').catch(() => {});
                  } else {
                      setHasMore(false);
@@ -216,11 +216,11 @@ const HomePage: React.FC = () => {
         const previousScrollHeight = container?.scrollHeight || 0;
 
         try {
-            const { data } = await api.get('/chat/history', { params: { limit: 20, before } });
+            const { data } = await api.get('/chat/history', { params: { limit: 30, before } });
             
             if (data && data.length > 0) {
                 setMessages(prev => [...data, ...prev]);
-                setHasMore(data.length === 20);
+                setHasMore(data.length === 30);
 
                 // Scroll Recovery (WhatsApp-style anchoring)
                 requestAnimationFrame(() => {
