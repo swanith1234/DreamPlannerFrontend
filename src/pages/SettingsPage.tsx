@@ -185,7 +185,50 @@ const SettingsPage: React.FC = () => {
                                             }
                                             return;
                                         }
-                                        // ... Web push logic ...
+                                        if (!('Notification' in window)) {
+                                            alert("Notifications are not supported in this browser.");
+                                            return;
+                                        }
+                                        const permission = await Notification.requestPermission();
+                                        if (permission === 'granted') {
+                                            if ('serviceWorker' in navigator) {
+                                                // Ensure SW is registered
+                                                let registration = await navigator.serviceWorker.getRegistration();
+                                                if (!registration) {
+                                                    registration = await navigator.serviceWorker.register('/sw.js');
+                                                }
+                                                await navigator.serviceWorker.ready;
+
+                                                // 1. Get VAPID Key
+                                                const { data } = await api.get('/notifications/vapid-key');
+                                                const { publicKey } = data;
+
+                                                // 2. Helper
+                                                const urlBase64ToUint8Array = (base64String: string) => {
+                                                    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+                                                    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+                                                    const rawData = window.atob(base64);
+                                                    const outputArray = new Uint8Array(rawData.length);
+                                                    for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+                                                    return outputArray;
+                                                }
+
+                                                // 3. Subscribe
+                                                const subscription = await registration.pushManager.subscribe({
+                                                    userVisibleOnly: true,
+                                                    applicationServerKey: urlBase64ToUint8Array(publicKey)
+                                                });
+
+                                                // 4. Send to Backend
+                                                await api.post('/notifications/subscribe', subscription);
+                                                alert("Notifications enabled successfully!");
+                                            } else {
+                                                alert("Service Worker not supported or not ready.");
+                                            }
+                                        } else {
+                                            setNotifications(false);
+                                            alert("Permission denied.");
+                                        }
                                     } else {
                                         // DISABLE: Unsubscribe
                                         if (isNativeApp) {
