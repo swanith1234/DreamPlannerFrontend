@@ -248,7 +248,10 @@ const AppShell: React.FC = () => {
             )}
 
             {/* Main Content Area */}
-            <main className={styles.main} style={{ paddingTop: showNotifBanner ? '40px' : '0', transition: 'padding-top 0.3s' }}>
+            <main className={styles.main} style={{ 
+                paddingTop: isNativeApp ? 'max(44px, env(safe-area-inset-top))' : (showNotifBanner ? '40px' : '0'), 
+                transition: 'padding-top 0.3s' 
+            }}>
                 <Outlet />
             </main>
 

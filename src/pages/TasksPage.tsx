@@ -128,9 +128,9 @@ const TasksPage: React.FC = () => {
         }
     };
 
-    const getStatusIcon = (status: string) => {
-        if (status === 'COMPLETED') return <RiCheckDoubleLine color="var(--color-success)" />;
-        if (status === 'IN_PROGRESS') return <RiLoader4Line className="spin" color="var(--color-accent)" />;
+    const getStatusIcon = (progress: number) => {
+        if (progress === 100) return <RiCheckDoubleLine color="var(--color-success)" />;
+        if (progress > 0) return <RiLoader4Line className="spin" color="var(--color-accent)" />;
         return <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: '2px solid var(--color-text-secondary)' }} />;
     };
 
@@ -208,7 +208,7 @@ const TasksPage: React.FC = () => {
                                             onClick={() => navigate(`/app/tasks/${task.id}`)}
                                         >
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                                {getStatusIcon(task.status)}
+                                                {getStatusIcon(task.progressPercent || 0)}
                                                 <div>
                                                     <div style={{ fontWeight: 500 }}>{task.title}</div>
                                                     <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
