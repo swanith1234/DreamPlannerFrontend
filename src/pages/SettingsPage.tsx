@@ -197,6 +197,22 @@ const SettingsPage: React.FC = () => {
                                                 if (!registration) {
                                                     registration = await navigator.serviceWorker.register('/sw.js');
                                                 }
+                                                
+                                                // Wait for the service worker to be active
+                                                if (!registration.active) {
+                                                    await new Promise<void>((resolve) => {
+                                                        const callback = () => {
+                                                            if (registration!.active) {
+                                                                registration!.installing?.removeEventListener('statechange', callback);
+                                                                registration!.waiting?.removeEventListener('statechange', callback);
+                                                                resolve();
+                                                            }
+                                                        };
+                                                        registration!.installing?.addEventListener('statechange', callback);
+                                                        registration!.waiting?.addEventListener('statechange', callback);
+                                                    });
+                                                }
+                                                
                                                 await navigator.serviceWorker.ready;
 
                                                 // 1. Get VAPID Key
