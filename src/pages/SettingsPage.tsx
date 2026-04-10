@@ -191,35 +191,15 @@ const SettingsPage: React.FC = () => {
                                         }
                                         const permission = await Notification.requestPermission();
                                         if (permission === 'granted') {
-                                            if ('serviceWorker' in navigator) {
-                                                // Ensure SW is registered
-                                                let registration = await navigator.serviceWorker.getRegistration();
-                                                if (!registration) {
-                                                    registration = await navigator.serviceWorker.register('/sw.js');
-                                                }
-                                                
-                                                // Wait for the service worker to be active
-                                                if (!registration.active) {
-                                                    await new Promise<void>((resolve) => {
-                                                        const callback = () => {
-                                                            if (registration!.active) {
-                                                                registration!.installing?.removeEventListener('statechange', callback);
-                                                                registration!.waiting?.removeEventListener('statechange', callback);
-                                                                resolve();
-                                                            }
-                                                        };
-                                                        registration!.installing?.addEventListener('statechange', callback);
-                                                        registration!.waiting?.addEventListener('statechange', callback);
-                                                    });
-                                                }
-                                                
+                                            if ('serviceWorker' in navigator && 'PushManager' in window) {
+                                                const registration = await navigator.serviceWorker.register('/sw.js');
                                                 await navigator.serviceWorker.ready;
 
                                                 // 1. Get VAPID Key
                                                 const { data } = await api.get('/notifications/vapid-key');
                                                 const { publicKey } = data;
 
-                                                // 2. Helper
+                                                // 2. Helper to convert VAPID key
                                                 const urlBase64ToUint8Array = (base64String: string) => {
                                                     const padding = '='.repeat((4 - base64String.length % 4) % 4);
                                                     const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
@@ -229,21 +209,21 @@ const SettingsPage: React.FC = () => {
                                                     return outputArray;
                                                 }
 
-                                                // 3. Subscribe
+                                                // 3. Subscribe via PushManager
                                                 const subscription = await registration.pushManager.subscribe({
                                                     userVisibleOnly: true,
                                                     applicationServerKey: urlBase64ToUint8Array(publicKey)
                                                 });
 
-                                                // 4. Send to Backend
+                                                // 4. Send subscription to backend
                                                 await api.post('/notifications/subscribe', subscription);
                                                 alert("Notifications enabled successfully!");
                                             } else {
-                                                alert("Service Worker not supported or not ready.");
+                                                alert("Push notifications are not supported in this browser.");
                                             }
                                         } else {
                                             setNotifications(false);
-                                            alert("Permission denied.");
+                                            alert("Permission denied. Please enable notifications in your browser settings.");
                                         }
                                     } else {
                                         // DISABLE: Unsubscribe
