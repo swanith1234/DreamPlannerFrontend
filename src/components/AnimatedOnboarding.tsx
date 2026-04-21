@@ -17,6 +17,8 @@ import {
   RiAddLine, RiTimeLine, RiFireLine, RiRoadMapLine,
   RiCheckDoubleLine, RiArrowUpLine,
   RiTrophyFill, RiFlashlightFill, RiCalendarCheckFill,
+  RiNotification3Line, RiVolumeUpLine, RiMoonLine,
+  RiShieldCheckLine,
 } from 'react-icons/ri';
 
 // ─── Design Tokens (mirrors variables.css) ────────────────────────────────────
@@ -67,15 +69,6 @@ const MOCK_MESSAGES_CLIMAX: ChatMsg[] = [
   },
 ];
 
-const MOCK_DREAM = {
-  id: 'mock-1',
-  title: 'Become a Full Stack AWS Engineer',
-  description: 'Master cloud architecture and build scalable serverless systems.',
-  motivationStatement: "David Goggins. They don't know me son.",
-  deadline: '2026-12-01T00:00:00Z',
-  eta: 'Dec 2026',
-  impactScore: 10,
-};
 
 const MOCK_ROADMAP_NODES = [
   { id: 'r1', title: 'AWS Cloud Practitioner', status: 'COMPLETED', orderIndex: 0 },
@@ -1223,7 +1216,7 @@ const Scene6: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
 
 // ─── Scene Progress Stepper ───────────────────────────────────────────────────
 
-const SCENE_LABELS = ['Mentor', 'Dream', 'Roadmap', 'Tasks', 'Vitals', 'Journey'];
+const SCENE_LABELS = ['Mentor', 'Dream', 'Roadmap', 'Tasks', 'Vitals', 'Journey', 'Setup'];
 
 const Stepper: React.FC<{ scene: number }> = ({ scene }) => (
   <div style={{ display: 'flex', alignItems: 'center', padding: '10px 16px', background: 'rgba(5,5,16,0.7)', borderBottom: `1px solid ${T.glassBorder}`, flexShrink: 0, gap: 0, overflowX: 'auto' }}>
@@ -1262,6 +1255,269 @@ const Stepper: React.FC<{ scene: number }> = ({ scene }) => (
     })}
   </div>
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCENE 7 — System Configuration (Settings page clone)
+// ─────────────────────────────────────────────────────────────────────────────
+
+type ToneType = 'NEUTRAL' | 'LOGICAL' | 'HARSH' | 'POSITIVE' | 'OPTIMISTIC' | 'FEAR';
+
+const TONE_META: Record<ToneType, { emoji: string; label: string; desc: string; color: string }> = {
+  NEUTRAL: { emoji: '⚖️', label: 'Neutral', desc: 'Balanced, fact-driven responses. No emotional pressure.', color: T.textSecondary },
+  LOGICAL: { emoji: '🧠', label: 'Logical', desc: 'Pure data and reasoning. Systems-thinking mentality.', color: '#00d4ff' },
+  HARSH: { emoji: '🔥', label: 'Harsh', desc: 'No excuses. Hard truths. Goggins-level accountability.', color: T.danger },
+  POSITIVE: { emoji: '💪', label: 'Positive', desc: 'Encouraging, uplifting. Celebrates every small win.', color: T.success },
+  OPTIMISTIC: { emoji: '🌟', label: 'Optimistic', desc: 'Glass half-full. Always sees the path forward.', color: T.gold },
+  FEAR: { emoji: '⚡', label: 'Fear', desc: 'Uses consequence framing. "What if you fail?" energy.', color: '#ff6b35' },
+};
+
+const Scene7: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
+  const [tone, setTone] = useState<ToneType>('NEUTRAL');
+  const [notifEnabled, setNotifEnabled] = useState(false);
+  const [agentName, setAgentName] = useState('');
+  const [preferredName, setPreferredName] = useState('');
+  const [freq, setFreq] = useState(60);
+  const [saved, setSaved] = useState(false);
+
+  const Toggle: React.FC<{ checked: boolean; onChange: (v: boolean) => void }> = ({ checked, onChange }) => (
+    <div onClick={() => onChange(!checked)}
+      style={{
+        width: 48, height: 24, borderRadius: 12,
+        background: checked ? T.accent : 'rgba(255,255,255,0.1)',
+        position: 'relative', cursor: 'pointer', transition: 'background 0.3s', flexShrink: 0,
+      }}
+    >
+      <div style={{
+        width: 20, height: 20, borderRadius: '50%', background: 'white',
+        position: 'absolute', top: 2, left: checked ? 26 : 2, transition: 'left 0.3s',
+        boxShadow: checked ? `0 0 8px ${T.accentGlow}` : 'none',
+      }} />
+    </div>
+  );
+
+  const handleFinish = () => {
+    setSaved(true);
+    setTimeout(() => onComplete(), 900);
+  };
+
+  return (
+    <SceneWrap>
+      <AppShellClone activeTab="settings">
+        {/* Header */}
+        <div style={{ marginBottom: 28 }}>
+          <h2 style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: '1.5rem', color: T.textPrimary, margin: 0 }}>
+            System Configuration
+          </h2>
+          <p style={{ color: T.textSecondary, margin: '4px 0 0', fontSize: '0.85rem' }}>
+            Personalise how your Mentor talks to you and when.
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 600 }}>
+
+          {/* ── Notifications card ── */}
+          <GC style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <motion.div
+                animate={!notifEnabled ? { scale: [1, 1.12, 1] } : {}}
+                transition={{ duration: 1.4, repeat: Infinity }}
+                style={{ width: 44, height: 44, borderRadius: 12, background: `${T.gold}18`, border: `1px solid ${T.gold}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+              >
+                <RiNotification3Line style={{ fontSize: '1.4rem', color: T.gold }} />
+              </motion.div>
+              <div>
+                <h3 style={{ fontSize: '1rem', fontWeight: 700, color: T.textPrimary, margin: 0, marginBottom: 3 }}>Enable Notifications</h3>
+                <p style={{ fontSize: '0.8rem', color: T.textSecondary, margin: 0, lineHeight: 1.4 }}>
+                  Allow your Mentor to send you real-time nudges, check-ins, and performance alerts.
+                </p>
+              </div>
+            </div>
+            <Toggle checked={notifEnabled} onChange={setNotifEnabled} />
+          </GC>
+
+          {/* Notification hint when disabled */}
+          <AnimatePresence>
+            {!notifEnabled && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                style={{ background: `${T.gold}0d`, border: `1px solid ${T.gold}30`, borderRadius: 12, padding: '10px 14px', display: 'flex', gap: 8, alignItems: 'flex-start', overflow: 'hidden' }}
+              >
+                <span style={{ fontSize: '1rem', flexShrink: 0 }}>💡</span>
+                <span style={{ fontSize: '0.78rem', color: T.textSecondary, lineHeight: 1.5 }}>
+                  Without notifications, your Mentor can't reach you between sessions. Turn it on to unlock JIT (Just-in-Time) coaching pushes.
+                </span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Frequency slider — only visible when notifications on */}
+          <AnimatePresence>
+            {notifEnabled && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ overflow: 'hidden' }}>
+                <GC>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
+                    <div style={{ width: 44, height: 44, borderRadius: 12, background: `${T.accent}18`, border: `1px solid ${T.accent}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <RiMoonLine style={{ fontSize: '1.4rem', color: T.accent }} />
+                    </div>
+                    <div>
+                      <h3 style={{ fontSize: '1rem', fontWeight: 700, color: T.textPrimary, margin: 0, marginBottom: 3 }}>Nudge Frequency</h3>
+                      <p style={{ fontSize: '0.8rem', color: T.textSecondary, margin: 0 }}>How often should we check in?</p>
+                    </div>
+                  </div>
+                  <input type="range" min={60} max={480} step={60} value={freq} onChange={e => setFreq(+e.target.value)}
+                    style={{ width: '100%', accentColor: T.accent }} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+                    <span style={{ fontSize: '0.72rem', color: T.textSecondary }}>Every hour</span>
+                    <span style={{ fontSize: '0.82rem', color: T.accent, fontWeight: 700 }}>
+                      Every {freq / 60} {freq / 60 === 1 ? 'hour' : 'hours'}
+                    </span>
+                    <span style={{ fontSize: '0.72rem', color: T.textSecondary }}>Every 8 hrs</span>
+                  </div>
+                </GC>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* ── AI Identity card ── */}
+          <GC>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: `${T.accent}18`, border: `1px solid ${T.accent}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <RiVolumeUpLine style={{ fontSize: '1.4rem', color: T.accent }} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1rem', fontWeight: 700, color: T.textPrimary, margin: 0, marginBottom: 3 }}>AI Identity &amp; Addressing</h3>
+                <p style={{ fontSize: '0.8rem', color: T.textSecondary, margin: 0 }}>Personalise how the AI identifies itself and addresses you.</p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Agent name */}
+              <div>
+                <label style={{ display: 'block', marginBottom: 8, fontSize: '0.88rem', color: T.textSecondary }}>Agent Name</label>
+                <p style={{ fontSize: '0.75rem', color: `${T.textSecondary}99`, marginBottom: 8, marginTop: -4 }}>
+                  Give your mentor a personality — a friend's name, a future version of yourself, or a fictional hero.
+                </p>
+                <input
+                  type="text"
+                  placeholder='e.g. "Future Jarvis", "Alex", "The Architect"'
+                  value={agentName}
+                  onChange={e => setAgentName(e.target.value)}
+                  style={{
+                    width: '100%', padding: 12, borderRadius: 8,
+                    background: 'rgba(255,255,255,0.07)', border: `1px solid ${T.glassBorder}`,
+                    color: T.textPrimary, outline: 'none', fontFamily: 'var(--font-body)', fontSize: '0.9rem',
+                  }}
+                />
+              </div>
+
+              {/* Preferred name */}
+              <div>
+                <label style={{ display: 'block', marginBottom: 8, fontSize: '0.88rem', color: T.textSecondary }}>How should the agent address you?</label>
+                <p style={{ fontSize: '0.75rem', color: `${T.textSecondary}99`, marginBottom: 8, marginTop: -4 }}>
+                  The mentor will use this name every time it speaks to you. Make it personal.
+                </p>
+                <input
+                  type="text"
+                  placeholder='e.g. "Boss", "Commander", "Tony"'
+                  value={preferredName}
+                  onChange={e => setPreferredName(e.target.value)}
+                  style={{
+                    width: '100%', padding: 12, borderRadius: 8,
+                    background: 'rgba(255,255,255,0.07)', border: `1px solid ${T.glassBorder}`,
+                    color: T.textPrimary, outline: 'none', fontFamily: 'var(--font-body)', fontSize: '0.9rem',
+                  }}
+                />
+              </div>
+            </div>
+          </GC>
+
+          {/* ── Tone Selector ── */}
+          <GC>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: `${T.accent}18`, border: `1px solid ${T.accent}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <RiVolumeUpLine style={{ fontSize: '1.4rem', color: T.accent }} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1rem', fontWeight: 700, color: T.textPrimary, margin: 0, marginBottom: 3 }}>Coach Personality</h3>
+                <p style={{ fontSize: '0.8rem', color: T.textSecondary, margin: 0 }}>How should the system talk to you?</p>
+              </div>
+            </div>
+
+            {/* Tone pill grid */}
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+              {(Object.keys(TONE_META) as ToneType[]).map(t => {
+                const active = tone === t;
+                const meta = TONE_META[t];
+                return (
+                  <button
+                    key={t}
+                    onClick={() => setTone(t)}
+                    style={{
+                      flex: '1 1 calc(33% - 10px)', minWidth: 90,
+                      padding: '10px 8px', borderRadius: 10, cursor: 'pointer',
+                      border: `1px solid ${active ? meta.color : T.glassBorder}`,
+                      background: active ? `${meta.color}18` : 'transparent',
+                      color: active ? meta.color : T.textSecondary,
+                      fontFamily: 'var(--font-body)', fontWeight: active ? 700 : 400,
+                      fontSize: '0.85rem', transition: 'all 0.25s ease',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+                    }}
+                  >
+                    <span style={{ fontSize: '1.2rem' }}>{meta.emoji}</span>
+                    <span>{meta.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Active tone description */}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={tone}
+                initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.25 }}
+                style={{
+                  background: `${TONE_META[tone].color}12`,
+                  border: `1px solid ${TONE_META[tone].color}30`,
+                  borderRadius: 10, padding: '10px 14px',
+                  display: 'flex', gap: 10, alignItems: 'flex-start',
+                }}
+              >
+                <span style={{ fontSize: '1.2rem', flexShrink: 0 }}>{TONE_META[tone].emoji}</span>
+                <div>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 700, color: TONE_META[tone].color, marginBottom: 2 }}>{TONE_META[tone].label}</div>
+                  <div style={{ fontSize: '0.78rem', color: T.textSecondary, lineHeight: 1.5 }}>{TONE_META[tone].desc}</div>
+                </div>
+              </motion.div>
+            </AnimatePresence>
+          </GC>
+
+          {/* ── Finish CTA ── */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', paddingBottom: 8 }}>
+            <AnimatePresence mode="wait">
+              {saved ? (
+                <motion.div
+                  key="saved"
+                  initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, color: T.success, fontWeight: 700, fontSize: '0.95rem' }}
+                >
+                  <RiShieldCheckLine style={{ fontSize: '1.2rem' }} /> Preferences saved!
+                </motion.div>
+              ) : (
+                <motion.div key="cta">
+                  <PulseCTA onClick={handleFinish} size="md">
+                    🚀 Save &amp; Launch IgniteMate
+                  </PulseCTA>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+        </div>
+      </AppShellClone>
+    </SceneWrap>
+  );
+};
 
 // ─── CSS injection for responsive sidebar/bottomnav ──────────────────────────
 
@@ -1311,7 +1567,8 @@ const AnimatedOnboarding: React.FC<AnimatedOnboardingProps> = ({ onComplete }) =
             {scene === 3 && <Scene3 key="s3" onNext={() => go(4)} />}
             {scene === 4 && <Scene4 key="s4" onNext={() => go(5)} />}
             {scene === 5 && <Scene5 key="s5" onNext={() => go(6)} />}
-            {scene === 6 && <Scene6 key="s6" onComplete={onComplete} />}
+            {scene === 6 && <Scene6 key="s6" onComplete={() => go(7)} />}
+            {scene === 7 && <Scene7 key="s7" onComplete={onComplete} />}
           </AnimatePresence>
         </div>
 
