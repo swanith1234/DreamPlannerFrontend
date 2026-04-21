@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../api/client';
 import PageTransition from '../components/PageTransition';
+import { useTour } from '../context/TourContext';
+import { MOCK_TOUR_DATA } from '../utils/mockTourData';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -163,8 +165,23 @@ const HomePage: React.FC = () => {
     const [agentName, setAgentName] = useState('IgniteMate');
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+    const { isTourMode } = useTour();
+
     // Initial fetch for history
     useEffect(() => {
+        if (isTourMode) {
+            setAgentName("The Architect");
+            setMessages(MOCK_TOUR_DATA.chat.map((msg, i) => ({
+                id: `mock-msg-${i}`,
+                text: msg.text,
+                sender: msg.sender as any,
+                timestamp: msg.timestamp,
+                readAt: Date.now()
+            })));
+            setHasMore(false);
+            return;
+        }
+
         const fetchInitialHistory = async () => {
              try {
                  // Fetch names
@@ -201,7 +218,7 @@ const HomePage: React.FC = () => {
              }
         };
         fetchInitialHistory();
-    }, []);
+    }, [isTourMode]);
 
     // Load older messages (Pagination)
     const loadMore = async () => {

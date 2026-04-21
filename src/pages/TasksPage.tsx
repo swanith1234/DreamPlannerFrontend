@@ -7,6 +7,8 @@ import GlassCard from '../components/GlassCard';
 import GlowButton from '../components/GlowButton';
 import PageTransition from '../components/PageTransition';
 import PageLoader from '../components/PageLoader';
+import { useTour } from '../context/TourContext';
+import { MOCK_TOUR_DATA } from '../utils/mockTourData';
 
 interface Task {
     id: string;
@@ -83,9 +85,26 @@ const TasksPage: React.FC = () => {
         setCheckpoints(generated);
     };
 
+    const { isTourMode } = useTour();
+
     useEffect(() => {
+        if (isTourMode) {
+            setDreams([{ id: 'mock-1', title: MOCK_TOUR_DATA.roadmap.dreamTitle }]);
+            setTasks(
+                MOCK_TOUR_DATA.dailyTasks.tasks.map(t => ({
+                    id: t.id,
+                    title: t.title,
+                    deadline: new Date().toISOString(),
+                    priority: 1,
+                    status: t.progress === 100 ? 'COMPLETED' : 'PENDING',
+                    progressPercent: t.progress,
+                    dreamId: 'mock-1'
+                })) as any
+            );
+            return;
+        }
         fetchData();
-    }, []);
+    }, [isTourMode]);
 
     const fetchData = async () => {
         setLoading(true);
@@ -193,7 +212,7 @@ const TasksPage: React.FC = () => {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
                     {groupedTasks.map(group => (
-                        <div key={group.id}>
+                        <div key={group.id} id={group.id === 'mock-1' ? 'tour-daily-tasks' : undefined}>
                             <h3 style={{ fontSize: '1.1rem', color: 'var(--color-text-secondary)', marginBottom: '16px', display: 'flex', alignItems: 'center' }}>
                                 <span style={{ width: '8px', height: '8px', background: 'var(--color-gold)', borderRadius: '50%', marginRight: '8px' }} />
                                 {group.title}

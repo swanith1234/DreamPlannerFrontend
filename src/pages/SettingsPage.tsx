@@ -6,6 +6,7 @@ import api from '../api/client';
 import GlassCard from '../components/GlassCard';
 import PageTransition from '../components/PageTransition';
 import PageLoader from '../components/PageLoader';
+import { useTour } from '../context/TourContext';
 
 const SettingsPage: React.FC = () => {
     const [tone, setTone] = useState<'NEUTRAL' | 'LOGICAL' | 'HARSH' | 'POSITIVE' | 'OPTIMISTIC' | 'FEAR'>('NEUTRAL');
@@ -22,7 +23,16 @@ const SettingsPage: React.FC = () => {
     const [agentName, setAgentName] = useState('');
     const [preferredName, setPreferredName] = useState('');
 
+    const { isTourMode } = useTour();
+
     React.useEffect(() => {
+        if (isTourMode) {
+            setTone('HARSH');
+            setPreferredName('Commander');
+            setIsLoading(false);
+            return;
+        }
+
         const fetchPreferences = async () => {
             try {
                 const { data } = await api.get('/users/preferences');
@@ -68,7 +78,7 @@ const SettingsPage: React.FC = () => {
         }
         fetchPreferences();
         checkPushStatus();
-    }, []);
+    }, [isTourMode]);
 
     const Toggle = ({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) => (
         <div
@@ -349,6 +359,7 @@ const SettingsPage: React.FC = () => {
                     </GlassCard>
 
                     {/* AI Identity Section */}
+                    <div id="tour-preferences">
                     <GlassCard>
                         <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
                             <RiVolumeUpLine style={{ fontSize: '1.5rem', marginRight: '16px', color: 'var(--color-accent)' }} />
@@ -380,6 +391,7 @@ const SettingsPage: React.FC = () => {
                             </div>
                         </div>
                     </GlassCard>
+                    </div>
 
                 </div>
 

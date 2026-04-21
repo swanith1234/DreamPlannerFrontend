@@ -21,6 +21,7 @@ import { useAuth } from '../context/AuthContext';
 import { isNativeApp } from '../utils/platform';
 import styles from './AppShell.module.css';
 
+
 const AppShell: React.FC = () => {
     const location = useLocation();
     const navigate = useNavigate();
@@ -156,6 +157,7 @@ const AppShell: React.FC = () => {
 
     return (
         <div className={styles.container}>
+
             {/* Notification Permission Modal */}
             <AnimatePresence>
                 {showNotifBanner && (

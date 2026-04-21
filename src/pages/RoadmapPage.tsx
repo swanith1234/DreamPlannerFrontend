@@ -9,6 +9,8 @@ import RoadmapGraph from '../components/Roadmap/RoadmapGraph';
 import { RiRefreshLine, RiSparkling2Fill } from 'react-icons/ri';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Info } from 'lucide-react';
+import { useTour } from '../context/TourContext';
+import { MOCK_TOUR_DATA } from '../utils/mockTourData';
 
 type RoadmapNodeStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'REVISION_REQUIRED';
 
@@ -97,15 +99,35 @@ export default function RoadmapPage() {
     }
   };
 
+  const { isTourMode } = useTour();
+
   const init = useCallback(async () => {
+    if (isTourMode) {
+      setLoading(true);
+      setRoadmap({
+        id: 'mock-roadmap-1',
+        status: 'ACTIVE',
+        dreamId: 'mock-1',
+        dream: { title: MOCK_TOUR_DATA.roadmap.dreamTitle, deadline: MOCK_TOUR_DATA.roadmap.eta },
+        milestones: MOCK_TOUR_DATA.roadmap.nodes.map((n, i) => ({
+          id: `m-${n.id}`,
+          title: n.title,
+          description: `Master ${n.title} concepts.`,
+          status: n.status as any,
+          orderIndex: i,
+          skills: []
+        }))
+      });
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const found = await fetchRoadmap();
     if (!found) {
-      // Automatically trigger generation if none exists
       await startGeneration();
     }
     setLoading(false);
-  }, [fetchRoadmap]);
+  }, [fetchRoadmap, isTourMode]);
 
   useEffect(() => {
     init();
