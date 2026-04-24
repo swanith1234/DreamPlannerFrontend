@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, AreaChart, Area } from 'recharts';
-import { Activity, Bug, Clock, CheckCircle, Trash2, ArrowRight, Users } from 'lucide-react';
+import { Activity, Bug, Trash2, ArrowRight, Users } from 'lucide-react';
 import api from '../api/client';
 import PageTransition from '../components/PageTransition';
 
