@@ -167,7 +167,14 @@ const TaskDetailPage: React.FC = () => {
     if (loading) return <PageLoader />;
     if (!task) return <div style={{ padding: '2rem', color: 'white' }}>Task not found</div>;
 
-    const isCompleted = task.status === 'COMPLETED';
+    const getDerivedStatus = (progress: number) => {
+        if (progress === 100) return 'COMPLETED';
+        if (progress > 0) return 'IN PROGRESS';
+        return 'PENDING';
+    };
+
+    const derivedStatus = getDerivedStatus(task.progressPercent || 0);
+    const isCompleted = derivedStatus === 'COMPLETED';
     const progressColor = isCompleted ? '#4CAF50' : '#4F46E5'; // Success green or primary brand color
 
     // Radius for circular progress
@@ -242,7 +249,7 @@ const TaskDetailPage: React.FC = () => {
                                         color: isCompleted ? '#66bb6a' : 'white',
                                         border: isCompleted ? '1px solid rgba(76, 175, 80, 0.3)' : '1px solid rgba(255,255,255,0.1)'
                                     }}>
-                                        {task.status.replace('_', ' ')}
+                                        {derivedStatus}
                                     </div>
                                 </div>
                             </div>

@@ -7,6 +7,12 @@ import GlassCard from '../components/GlassCard';
 import GlowButton from '../components/GlowButton';
 import PageTransition from '../components/PageTransition';
 import PageLoader from '../components/PageLoader';
+import Skeleton from '../components/ui/Skeleton';
+import useSWR from 'swr';
+import { useTour } from '../context/TourContext';
+import { MOCK_TOUR_DATA } from '../utils/mockTourData';
+
+const fetcher = (url: string) => api.get(url).then(res => res.data);
 
 interface Task {
     id: string;
@@ -14,6 +20,7 @@ interface Task {
     deadline: string;
     priority: number;
     status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
+    progressPercent?: number;
 }
 
 interface Dream {
@@ -29,8 +36,20 @@ interface Checkpoint {
 
 const TasksPage: React.FC = () => {
     const navigate = useNavigate();
-    const [tasks, setTasks] = useState<Task[]>([]);
-    const [dreams, setDreams] = useState<Dream[]>([]);
+    
+    const { isTourMode } = useTour();
+
+    // SWR Data Fetching
+    const { data: dreamsRes, isLoading: dreamsLoading } = useSWR(isTourMode ? null : '/dreams', fetcher);
+    const { data: tasksRes, isLoading: tasksLoading, mutate: mutateTasks } = useSWR(isTourMode ? null : '/tasks', fetcher);
+
+    // Tour mode mock states
+    const [mockDreams, setMockDreams] = useState<Dream[]>([]);
+    const [mockTasks, setMockTasks] = useState<Task[]>([]);
+
+    const dreams: Dream[] = isTourMode ? mockDreams : (dreamsRes?.dreams || []);
+    const tasks: Task[] = isTourMode ? mockTasks : (tasksRes?.tasks || []);
+    
     const [showCreate, setShowCreate] = useState(false);
 
     // Filter
@@ -83,24 +102,21 @@ const TasksPage: React.FC = () => {
     };
 
     useEffect(() => {
-        fetchData();
-    }, []);
-
-    const fetchData = async () => {
-        setLoading(true);
-        try {
-            const [dreamsRes, tasksRes] = await Promise.all([
-                api.get('/dreams'),
-                api.get('/tasks') // Assuming generic list or filters later
-            ]);
-            setDreams(dreamsRes.data.dreams || []);
-            setTasks(tasksRes.data.tasks || []);
-        } catch (error) {
-            console.error("Failed to fetch data", error);
-        } finally {
-            setLoading(false);
+        if (isTourMode) {
+            setMockDreams([{ id: 'mock-1', title: MOCK_TOUR_DATA.roadmap.dreamTitle }]);
+            setMockTasks(
+                MOCK_TOUR_DATA.dailyTasks.tasks.map(t => ({
+                    id: t.id,
+                    title: t.title,
+                    deadline: new Date().toISOString(),
+                    priority: 1,
+                    status: t.progress === 100 ? 'COMPLETED' : 'PENDING',
+                    progressPercent: t.progress,
+                    dreamId: 'mock-1'
+                })) as any
+            );
         }
-    };
+    }, [isTourMode]);
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -119,7 +135,7 @@ const TasksPage: React.FC = () => {
             setTitle('');
             setDeadline('');
             setCheckpoints([]);
-            fetchData();
+            mutateTasks();
         } catch (error) {
             console.error("Failed to create task", error);
         } finally {
@@ -127,21 +143,26 @@ const TasksPage: React.FC = () => {
         }
     };
 
-    const getStatusIcon = (status: string) => {
-        if (status === 'COMPLETED') return <RiCheckDoubleLine color="var(--color-success)" />;
-        if (status === 'IN_PROGRESS') return <RiLoader4Line className="spin" color="var(--color-accent)" />;
+    const getStatusIcon = (progress: number) => {
+        if (progress === 100) return <RiCheckDoubleLine color="var(--color-success)" />;
+        if (progress > 0) return <RiLoader4Line className="spin" color="var(--color-accent)" />;
         return <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: '2px solid var(--color-text-secondary)' }} />;
     };
 
     // Group tasks by dream if needed, or just list them. 
     // Requirement says "Grouped by Dream".
+    const getTasksByFilter = (tasksList: Task[]) => tasksList.filter(t => {
+        const progress = t.progressPercent || 0;
+        if (filter === 'PENDING') return progress === 0;
+        if (filter === 'IN_PROGRESS') return progress > 0 && progress < 100;
+        if (filter === 'COMPLETED') return progress === 100;
+        return false;
+    });
+
     const groupedTasks = dreams.map(dream => ({
         ...dream,
-        tasks: tasks.filter(t => t.status === filter && tasks.find(task => task.id === t.id)) // Real filtering logic depends on if API returns dreamId in task
-        // Since I don't see dreamId in Task interface from my previous read, I'll need to check the API response or assume it's there.
-        // The previous context "Create Task" payload had dreamId. So Task object should have it.
-        // I'll assume task.dreamId exists.
-    })).filter(group => tasks.some(t => (t as any).dreamId === group.id && t.status === filter));
+        tasks: getTasksByFilter(tasks).filter(t => (t as any).dreamId === dream.id)
+    })).filter(group => group.tasks.length > 0);
 
     // Fallback if no specific relation shown in UI easily without dreamId in task object
     // For now I'll trust the plan and assume.
@@ -186,40 +207,65 @@ const TasksPage: React.FC = () => {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-                    {groupedTasks.map(group => (
-                        <div key={group.id}>
-                            <h3 style={{ fontSize: '1.1rem', color: 'var(--color-text-secondary)', marginBottom: '16px', display: 'flex', alignItems: 'center' }}>
-                                <span style={{ width: '8px', height: '8px', background: 'var(--color-gold)', borderRadius: '50%', marginRight: '8px' }} />
-                                {group.title}
-                            </h3>
-                            <div style={{ display: 'grid', gap: '12px' }}>
-                                {group.tasks.map((task) => (
-                                    (task as any).dreamId === group.id && (
-                                        <GlassCard
-                                            key={task.id}
-                                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', cursor: 'pointer' }}
-                                            whileHover={{ x: 4 }}
-                                            onClick={() => navigate(`/app/tasks/${task.id}`)}
-                                        >
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                                {getStatusIcon(task.status)}
-                                                <div>
-                                                    <div style={{ fontWeight: 500 }}>{task.title}</div>
-                                                    <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
-                                                        Due: {new Date(task.deadline).toLocaleDateString()}
+                    {/* Skeletons while Loading */}
+                    {(dreamsLoading || tasksLoading) ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                            {[1, 2].map((groupKey) => (
+                                <div key={groupKey}>
+                                    <h3 style={{ fontSize: '1.1rem', marginBottom: '16px', display: 'flex', alignItems: 'center' }}>
+                                        <Skeleton className="w-[8px] h-[8px] rounded-full mr-[8px]" />
+                                        <Skeleton className="w-[140px] h-[20px]" />
+                                    </h3>
+                                    <div style={{ display: 'grid', gap: '12px' }}>
+                                        {[1, 2, 3].map((taskKey) => (
+                                            <GlassCard key={taskKey} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', width: '100%' }}>
+                                                    <Skeleton className="w-[16px] h-[16px] rounded-full flex-shrink-0" />
+                                                    <div className="flex-1 space-y-2">
+                                                        <Skeleton className="w-[200px] h-[16px]" />
+                                                        <Skeleton className="w-[120px] h-[12px]" />
                                                     </div>
                                                 </div>
-                                            </div>
-
-                                            {/* Simple action to move to next stage could go here */}
-                                        </GlassCard>
-                                    )
-                                ))}
-                            </div>
+                                            </GlassCard>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
                         </div>
-                    ))}
+                    ) : (
+                        groupedTasks.map(group => (
+                            <div key={group.id} id={group.id === 'mock-1' ? 'tour-daily-tasks' : undefined}>
+                                <h3 style={{ fontSize: '1.1rem', color: 'var(--color-text-secondary)', marginBottom: '16px', display: 'flex', alignItems: 'center' }}>
+                                    <span style={{ width: '8px', height: '8px', background: 'var(--color-gold)', borderRadius: '50%', marginRight: '8px' }} />
+                                    {group.title}
+                                </h3>
+                                <div style={{ display: 'grid', gap: '12px' }}>
+                                    {group.tasks.map((task) => (
+                                        (task as any).dreamId === group.id && (
+                                            <GlassCard
+                                                key={task.id}
+                                                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', cursor: 'pointer' }}
+                                                whileHover={{ x: 4 }}
+                                                onClick={() => navigate(`/app/tasks/${task.id}`)}
+                                            >
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                                    {getStatusIcon(task.progressPercent || 0)}
+                                                    <div>
+                                                        <div style={{ fontWeight: 500 }}>{task.title}</div>
+                                                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+                                                            Due: {new Date(task.deadline).toLocaleDateString()}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </GlassCard>
+                                        )
+                                    ))}
+                                </div>
+                            </div>
+                        ))
+                    )}
 
-                    {groupedTasks.length === 0 && (
+                    {(!dreamsLoading && !tasksLoading && groupedTasks.length === 0) && (
                         <div style={{ textAlign: 'center', padding: '48px', color: 'var(--color-text-secondary)' }}>
                             No {filter.toLowerCase().replace('_', ' ')} missions found.
                         </div>

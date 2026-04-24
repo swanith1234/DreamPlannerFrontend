@@ -1,8 +1,11 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { isNativeApp } from '../utils/platform';
 import GlowButton from '../components/GlowButton';
 import PageTransition from '../components/PageTransition';
+import PageLoader from '../components/PageLoader';
 import styles from './LandingPage.module.css';
 import heroBg from '../assets/hero-bg.png';
 
@@ -36,6 +39,20 @@ const Particle: React.FC<{ index: number }> = ({ index }) => {
 
 const LandingPage: React.FC = () => {
     const navigate = useNavigate();
+    const { isAuthenticated, loading } = useAuth();
+
+    React.useEffect(() => {
+        if (loading) return;
+        if (isAuthenticated) {
+            navigate('/app/home', { replace: true });
+        } else if (isNativeApp) {
+            navigate('/login', { replace: true });
+        }
+    }, [isAuthenticated, loading, navigate]);
+
+    if (loading || isAuthenticated || isNativeApp) {
+        return <PageLoader />;
+    }
 
     return (
         <PageTransition>

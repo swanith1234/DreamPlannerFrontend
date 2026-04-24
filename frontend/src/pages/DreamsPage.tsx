@@ -7,6 +7,8 @@ import GlassCard from '../components/GlassCard';
 import GlowButton from '../components/GlowButton';
 import PageTransition from '../components/PageTransition';
 import PageLoader from '../components/PageLoader';
+import { useTour } from '../context/TourContext';
+import { MOCK_TOUR_DATA } from '../utils/mockTourData';
 
 interface Dream {
     id: string;
@@ -41,9 +43,22 @@ const DreamsPage: React.FC = () => {
     const [additionalContext, setAdditionalContext] = useState('');
     const [loading, setLoading] = useState(false);
 
+    const { isTourMode } = useTour();
+
     useEffect(() => {
+        if (isTourMode) {
+            setDreams([{
+                id: 'mock-1',
+                title: MOCK_TOUR_DATA.roadmap.dreamTitle,
+                description: 'Master cloud architecture and build scalable serverless systems seamlessly.',
+                motivationStatement: 'David Goggins. They don\'t know me son.',
+                deadline: '2026-12-01T00:00:00Z',
+                impactScore: 10
+            }]);
+            return;
+        }
         fetchDreams();
-    }, []);
+    }, [isTourMode]);
 
     const fetchDreams = async () => {
         setLoading(true);
@@ -188,8 +203,8 @@ const DreamsPage: React.FC = () => {
                     animate="show"
                 >
                     {dreams.map((dream) => (
+                        <div id={dream.id === 'mock-1' ? 'tour-roadmap' : undefined} key={dream.id}>
                         <GlassCard
-                            key={dream.id}
                             variants={itemVariants}
                             whileHover={{ scale: 1.02 }}
                             style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}
@@ -233,6 +248,7 @@ const DreamsPage: React.FC = () => {
                                 </GlowButton>
                             </div>
                         </GlassCard>
+                        </div>
                     ))}
                 </motion.div>
 

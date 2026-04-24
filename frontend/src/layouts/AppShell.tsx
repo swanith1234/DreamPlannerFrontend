@@ -20,6 +20,8 @@ import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { isNativeApp } from '../utils/platform';
 import styles from './AppShell.module.css';
+import FeedbackWidget from '../components/FeedbackWidget';
+
 
 const AppShell: React.FC = () => {
     const location = useLocation();
@@ -60,7 +62,10 @@ const AppShell: React.FC = () => {
                 });
 
                 PushNotifications.addListener('registration', async (token) => {
+                    alert("Native Registration Success: " + token.value.substring(0, 5) + "...");
                     try {
+                        localStorage.setItem('fcm_token_native', token.value);
+                        
                         const subscriptionPayload = {
                             endpoint: token.value,
                             keys: {
@@ -68,10 +73,19 @@ const AppShell: React.FC = () => {
                                 auth: 'NATIVE'
                             }
                         };
+                        console.log("Syncing token to backend...", subscriptionPayload);
+                        alert("Syncing to backend: " + api.defaults.baseURL);
                         await api.post('/notifications/subscribe', subscriptionPayload);
-                    } catch (err) {
+                        alert("Sync successful! Entry created in DB.");
+                    } catch (err: any) {
+                        const errMsg = err.response?.data?.message || err.message || "Unknown Network Error";
+                        alert("Sync Failed: " + errMsg);
                         console.error("Failed to sync Native FCM token", err);
                     }
+                });
+
+                PushNotifications.addListener('registrationError', (error: any) => {
+                    alert("Native Registration Error: " + JSON.stringify(error));
                 });
 
                 PushNotifications.addListener('pushNotificationActionPerformed', async (notification) => {
@@ -83,12 +97,16 @@ const AppShell: React.FC = () => {
                         }
                     }
                 });
+                // Auto-register if permission already granted to ensure token is synced
+                const permStatus = await PushNotifications.checkPermissions();
+                if (permStatus.receive === 'granted') {
+                    await PushNotifications.register();
+                }
             };
             setupNativePush();
         }
     }, [isNativeApp]);
 
-    /*
     const urlBase64ToUint8Array = (base64String: string) => {
         const padding = '='.repeat((4 - base64String.length % 4) % 4);
         const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
@@ -99,7 +117,6 @@ const AppShell: React.FC = () => {
         }
         return outputArray;
     }
-    */
 
     const enableNotifications = async () => {
         if (!('Notification' in window)) return;
@@ -107,8 +124,8 @@ const AppShell: React.FC = () => {
             const permission = await Notification.requestPermission();
             if (permission !== 'granted') return;
             setShowNotifBanner(false);
-            /* 
-            // Register Service Worker - DISABLED TEMPORARILY TO FIX CACHE SYNC
+            
+            // Register Service Worker for Web Push
             if ('serviceWorker' in navigator) {
                 const register = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
                 const { data: { publicKey } } = await import('../api/client').then(m => m.default.get('/notifications/vapid-key'));
@@ -118,19 +135,23 @@ const AppShell: React.FC = () => {
                 });
                 await import('../api/client').then(m => m.default.post('/notifications/subscribe', subscription));
             }
-            */
         } catch (error) {
             console.error("Error subscribing", error);
         }
     };
 
-    const navItems = [
+    const baseNavItems = [
         { path: '/app/home', icon: RiHome5Line, activeIcon: RiHome5Fill, label: 'Home' },
         { path: '/app/dashboard', icon: RiDashboardLine, activeIcon: RiDashboardFill, label: 'Dashboard' },
         { path: '/app/dreams', icon: RiMoonClearLine, activeIcon: RiMoonClearFill, label: 'Dreams' },
         { path: '/app/tasks', icon: RiCheckboxCircleLine, activeIcon: RiCheckboxCircleFill, label: 'Tasks' },
         { path: '/app/settings', icon: RiSettings4Line, activeIcon: RiSettings4Fill, label: 'Settings' },
     ];
+
+    const { user } = useAuth();
+    const navItems = user?.email === 'pidugubunny534@gmail.com'
+        ? [...baseNavItems, { path: '/app/admin', icon: RiCheckboxCircleLine, activeIcon: RiCheckboxCircleFill, label: 'Admin' }]
+        : baseNavItems;
 
     const handleLogout = () => {
         logout();
@@ -139,6 +160,7 @@ const AppShell: React.FC = () => {
 
     return (
         <div className={styles.container}>
+
             {/* Notification Permission Modal */}
             <AnimatePresence>
                 {showNotifBanner && (
@@ -201,37 +223,40 @@ const AppShell: React.FC = () => {
 
             {/* Sidebar for Desktop / Hidden on Mobile */}
             {!isNativeApp && (
-            <aside className={styles.sidebar}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: 'var(--spacing-2xl)' }}>
-                    <img src="/logo.png" alt="IgniteMate" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />
-                    <span className={styles.logo} style={{ marginBottom: 0 }}>IgniteMate</span>
-                </div>
-                <nav className={styles.nav}>
-                    {navItems.map((item) => {
-                        const isActive = location.pathname.startsWith(item.path);
-                        const Icon = isActive ? item.activeIcon : item.icon;
+                <aside className={styles.sidebar}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: 'var(--spacing-2xl)' }}>
+                        <img src="/logo.png" alt="IgniteMate" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />
+                        <span className={styles.logo} style={{ marginBottom: 0 }}>IgniteMate</span>
+                    </div>
+                    <nav className={styles.nav}>
+                        {navItems.map((item) => {
+                            const isActive = location.pathname.startsWith(item.path);
+                            const Icon = isActive ? item.activeIcon : item.icon;
 
-                        return (
-                            <button
-                                key={item.path}
-                                className={`${styles.navItem} ${isActive ? styles.active : ''}`}
-                                onClick={() => navigate(item.path)}
-                            >
-                                <Icon className={styles.icon} />
-                                <span className={styles.label}>{item.label}</span>
-                                {isActive && <motion.div layoutId="sidebar-active" className={styles.activeIndicator} />}
-                            </button>
-                        );
-                    })}
-                </nav>
-                <button className={styles.logoutBtn} onClick={handleLogout}>
-                    <RiLogoutBoxLine />
-                </button>
-            </aside>
+                            return (
+                                <button
+                                    key={item.path}
+                                    className={`${styles.navItem} ${isActive ? styles.active : ''}`}
+                                    onClick={() => navigate(item.path)}
+                                >
+                                    <Icon className={styles.icon} />
+                                    <span className={styles.label}>{item.label}</span>
+                                    {isActive && <motion.div layoutId="sidebar-active" className={styles.activeIndicator} />}
+                                </button>
+                            );
+                        })}
+                    </nav>
+                    <button className={styles.logoutBtn} onClick={handleLogout}>
+                        <RiLogoutBoxLine />
+                    </button>
+                </aside>
             )}
 
             {/* Main Content Area */}
-            <main className={styles.main} style={{ paddingTop: showNotifBanner ? '40px' : '0', transition: 'padding-top 0.3s' }}>
+            <main className={styles.main} style={{ 
+                paddingTop: isNativeApp ? 'max(44px, env(safe-area-inset-top))' : (showNotifBanner ? '40px' : '0'), 
+                transition: 'padding-top 0.3s' 
+            }}>
                 <Outlet />
             </main>
 
@@ -261,6 +286,9 @@ const AppShell: React.FC = () => {
                     <RiLogoutBoxLine className={styles.icon} />
                 </button>
             </nav>
+
+            {/* Smart Feedback Widget */}
+            <FeedbackWidget />
         </div>
     );
 };

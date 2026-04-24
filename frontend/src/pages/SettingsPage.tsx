@@ -6,6 +6,7 @@ import api from '../api/client';
 import GlassCard from '../components/GlassCard';
 import PageTransition from '../components/PageTransition';
 import PageLoader from '../components/PageLoader';
+import { useTour } from '../context/TourContext';
 
 const SettingsPage: React.FC = () => {
     const [tone, setTone] = useState<'NEUTRAL' | 'LOGICAL' | 'HARSH' | 'POSITIVE' | 'OPTIMISTIC' | 'FEAR'>('NEUTRAL');
@@ -22,7 +23,16 @@ const SettingsPage: React.FC = () => {
     const [agentName, setAgentName] = useState('');
     const [preferredName, setPreferredName] = useState('');
 
+    const { isTourMode } = useTour();
+
     React.useEffect(() => {
+        if (isTourMode) {
+            setTone('HARSH');
+            setPreferredName('Commander');
+            setIsLoading(false);
+            return;
+        }
+
         const fetchPreferences = async () => {
             try {
                 const { data } = await api.get('/users/preferences');
@@ -68,7 +78,7 @@ const SettingsPage: React.FC = () => {
         }
         fetchPreferences();
         checkPushStatus();
-    }, []);
+    }, [isTourMode]);
 
     const Toggle = ({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) => (
         <div
@@ -166,45 +176,59 @@ const SettingsPage: React.FC = () => {
                                     if (newState) {
                                         // ENABLE: Request permission & Subscribe
                                         if (isNativeApp) {
-                                            let permStatus = await PushNotifications.checkPermissions();
-                                            if (permStatus.receive === 'prompt') {
-                                                permStatus = await PushNotifications.requestPermissions();
-                                            }
-                                            if (permStatus.receive !== 'granted') {
+                                            try {
+                                                let permStatus = await PushNotifications.checkPermissions();
+                                                if (permStatus.receive === 'prompt') {
+                                                    permStatus = await PushNotifications.requestPermissions();
+                                                }
+                                                if (permStatus.receive !== 'granted') {
+                                                    setNotifications(false);
+                                                    alert("Permission denied. Please enable notifications in your phone settings.");
+                                                    return;
+                                                }
+
+                                                // Get the FCM token by listening for the registration event inline
+                                                const token = await new Promise<string>((resolve, reject) => {
+                                                    PushNotifications.addListener('registration', (t) => {
+                                                        resolve(t.value);
+                                                    });
+                                                    PushNotifications.addListener('registrationError', (err) => {
+                                                        reject(new Error(JSON.stringify(err)));
+                                                    });
+                                                    PushNotifications.register();
+                                                });
+
+                                                // Save locally for unsubscribe later
+                                                localStorage.setItem('fcm_token_native', token);
+
+                                                // Send to backend
+                                                await api.post('/notifications/subscribe', {
+                                                    endpoint: token,
+                                                    keys: { p256dh: 'NATIVE', auth: 'NATIVE' }
+                                                });
+
+                                                alert("Notifications enabled! Token synced to backend.");
+                                            } catch (err: any) {
+                                                alert("Enable failed: " + (err.message || "Unknown error"));
                                                 setNotifications(false);
-                                                alert("Permission denied. Please enable notifications in your phone settings.");
-                                                return;
                                             }
-                                            await PushNotifications.register();
-                                            alert("Notifications enabled successfully!");
                                             return;
                                         }
-
                                         if (!('Notification' in window)) {
                                             alert("Notifications are not supported in this browser.");
                                             return;
                                         }
                                         const permission = await Notification.requestPermission();
                                         if (permission === 'granted') {
-                                            if ('serviceWorker' in navigator) {
-                                                // Ensure SW is registered
-                                                let registration = await navigator.serviceWorker.getRegistration();
-                                                if (!registration) {
-                                                    console.log("Registering new Service Worker...");
-                                                    registration = await navigator.serviceWorker.register('/sw.js');
-                                                }
-
-                                                // Wait for it to be active
+                                            if ('serviceWorker' in navigator && 'PushManager' in window) {
+                                                const registration = await navigator.serviceWorker.register('/sw.js');
                                                 await navigator.serviceWorker.ready;
 
                                                 // 1. Get VAPID Key
                                                 const { data } = await api.get('/notifications/vapid-key');
-                                                if (!data || !data.publicKey) {
-                                                    throw new Error("Failed to get VAPID Key from server");
-                                                }
                                                 const { publicKey } = data;
 
-                                                // 2. Helper to convert key
+                                                // 2. Helper to convert VAPID key
                                                 const urlBase64ToUint8Array = (base64String: string) => {
                                                     const padding = '='.repeat((4 - base64String.length % 4) % 4);
                                                     const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
@@ -214,28 +238,40 @@ const SettingsPage: React.FC = () => {
                                                     return outputArray;
                                                 }
 
-                                                // 3. Subscribe
-                                                console.log("Subscribing to push manager...");
+                                                // 3. Subscribe via PushManager
                                                 const subscription = await registration.pushManager.subscribe({
                                                     userVisibleOnly: true,
                                                     applicationServerKey: urlBase64ToUint8Array(publicKey)
                                                 });
 
-                                                // 4. Send to Backend
-                                                console.log("Sending subscription to backend...", subscription);
+                                                // 4. Send subscription to backend
                                                 await api.post('/notifications/subscribe', subscription);
                                                 alert("Notifications enabled successfully!");
                                             } else {
-                                                alert("Service Worker not supported or not ready.");
+                                                alert("Push notifications are not supported in this browser.");
                                             }
                                         } else {
-                                            setNotifications(false); // Denied
+                                            setNotifications(false);
                                             alert("Permission denied. Please enable notifications in your browser settings.");
                                         }
                                     } else {
                                         // DISABLE: Unsubscribe
                                         if (isNativeApp) {
-                                            alert("To fully disable push notifications, please disable them in your android application settings under Apps -> IgniteMate.");
+                                            try {
+                                                const savedToken = localStorage.getItem('fcm_token_native');
+                                                if (savedToken) {
+                                                    alert("Unsubscribing: " + savedToken.substring(0, 10) + "...");
+                                                    await api.post('/notifications/unsubscribe', { endpoint: savedToken });
+                                                    localStorage.removeItem('fcm_token_native');
+                                                    alert("Unsubscribe API call finished.");
+                                                } else {
+                                                    alert("No local token found to unsubscribe.");
+                                                }
+                                            } catch (err: any) {
+                                                alert("Disable failed: " + (err.message || "Unknown error"));
+                                                setNotifications(true); // Revert
+                                            }
+                                            alert("Push notifications toggle finished.");
                                             return;
                                         }
                                         if ('serviceWorker' in navigator) {
@@ -323,6 +359,7 @@ const SettingsPage: React.FC = () => {
                     </GlassCard>
 
                     {/* AI Identity Section */}
+                    <div id="tour-preferences">
                     <GlassCard>
                         <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
                             <RiVolumeUpLine style={{ fontSize: '1.5rem', marginRight: '16px', color: 'var(--color-accent)' }} />
@@ -354,6 +391,7 @@ const SettingsPage: React.FC = () => {
                             </div>
                         </div>
                     </GlassCard>
+                    </div>
 
                 </div>
 

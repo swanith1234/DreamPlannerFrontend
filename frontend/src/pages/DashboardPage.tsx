@@ -6,6 +6,7 @@ import {
     RiAlertFill, RiArrowUpLine, RiCalendarCheckFill,
 
 } from 'react-icons/ri';
+import { useTour } from '../context/TourContext';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -390,9 +391,40 @@ const DashboardPage: React.FC = () => {
         analyticsApi.listSprints().then(setSprints).catch(console.error);
     }, []);
 
+    const { isTourMode } = useTour();
+
     useEffect(() => {
         setLoading(true);
         setError(null);
+        
+        if (isTourMode) {
+            // High UX Mock Data
+            setTimeout(() => {
+                setData({
+                    sprintWindow: { start: '2026-04-14', end: '2026-04-20' },
+                    checkpoints: {
+                        planned: { count: 12, items: [] },
+                        earlyCompleted: { count: 2, items: [] },
+                        onTimeCompleted: { count: 8, items: [] },
+                        recovered: { count: 2, items: [] },
+                        overduePending: { count: 0, items: [] },
+                    },
+                    rates: { executionRate: 100, recoveryRate: 100 },
+                    activity: {
+                        activeDays: 6, missedDays: 1, overachievementDays: 2,
+                        totalEffort: 550,
+                        dailyEffort: {
+                            '2026-04-14': 80, '2026-04-15': 120, '2026-04-16': 90,
+                            '2026-04-17': 0, '2026-04-18': 100, '2026-04-19': 60, '2026-04-20': 100
+                        }
+                    },
+                    scores: { consistency: 84, intensity: 88, disciplineScore: 92 }
+                });
+                setLoading(false);
+            }, 500); // give tiny delay for layout transition
+            return;
+        }
+
         if (selectedSprint === 'current') {
             analyticsApi.getWeeklyDashboard()
                 .then(setData)
@@ -435,7 +467,7 @@ const DashboardPage: React.FC = () => {
                 .catch(e => setError(e.message))
                 .finally(() => setLoading(false));
         }
-    }, [selectedSprint]);
+    }, [selectedSprint, isTourMode]);
 
     if (loading) return (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', gap: 16 }}>
@@ -456,7 +488,7 @@ const DashboardPage: React.FC = () => {
     const totalCompleted = checkpoints.earlyCompleted.count + checkpoints.onTimeCompleted.count + checkpoints.recovered.count;
 
     return (
-        <div style={{ padding: isMobile ? '12px 16px' : '24px 28px', maxWidth: 1280, margin: '0 auto' }}>
+        <div id="tour-dashboard" style={{ padding: isMobile ? '12px 16px' : '24px 28px', maxWidth: 1280, margin: '0 auto' }}>
 
             {/* ── Header ── */}
             <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
