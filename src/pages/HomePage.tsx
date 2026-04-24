@@ -381,6 +381,27 @@ const HomePage: React.FC = () => {
                     </div>
                 </div>
 
+                {/* ── MVP Warning ── */}
+                <motion.div 
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    style={{ 
+                        background: 'rgba(255, 193, 7, 0.1)', 
+                        border: '1px solid rgba(255, 193, 7, 0.2)', 
+                        borderRadius: '12px', 
+                        padding: '8px 12px', 
+                        marginBottom: '16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px'
+                    }}
+                >
+                    <span style={{ fontSize: '1.2rem' }}>⚠️</span>
+                    <p style={{ fontSize: '0.75rem', color: '#ffc107', margin: 0, lineHeight: 1.4 }}>
+                        <strong>MVP Preview:</strong> Continuous chatting is limited in this version. You may hit token limits if conversations get too long.
+                    </p>
+                </motion.div>
+
                 {/* ── Messages ── */}
                 <div ref={scrollContainerRef} style={{ flex: 1, overflowY: 'auto', paddingBottom: 16, display: 'flex', flexDirection: 'column', paddingRight: 4 }}>
                     {/* Top Anchor for Infinite Scroll */}

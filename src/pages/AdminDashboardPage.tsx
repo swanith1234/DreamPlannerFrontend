@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, AreaChart, Area } from 'recharts';
 import { Activity, Bug, Trash2, ArrowRight, Users } from 'lucide-react';
 import api from '../api/client';
@@ -19,6 +20,7 @@ interface DashboardData {
 }
 
 const AdminDashboardPage: React.FC = () => {
+  const navigate = useNavigate();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -255,6 +257,15 @@ const AdminDashboardPage: React.FC = () => {
                             <Trash2 size={14} /> Ignore
                           </button>
                         </div>
+                      )}
+                      {f.status === 'IN_PROGRESS' && (
+                        <button onClick={() => navigate(`/app/fix/${f.id}`)} style={{
+                          background: 'rgba(0, 242, 234, 0.1)', color: 'var(--color-accent)', border: '1px solid var(--color-accent)',
+                          padding: '6px 12px', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+                          fontSize: '0.8rem', fontWeight: 600
+                        }}>
+                          <Activity size={14} /> View Progress
+                        </button>
                       )}
                     </td>
                   </tr>

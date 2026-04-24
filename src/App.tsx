@@ -20,6 +20,7 @@ import RoadmapPage from './pages/RoadmapPage';
 import AssessmentPage from './pages/AssessmentPage';
 import RoadmapRedirect from './components/RoadmapRedirect';
 import AdminDashboardPage from './pages/AdminDashboardPage';
+import FixStatusPage from './pages/FixStatusPage';
 
 // ─── Protected Route ──────────────────────────────────────────────────────────
 
@@ -67,6 +68,11 @@ const AnimatedRoutes: React.FC = () => {
           <Route path="admin" element={
             <AdminRoute>
               <AdminDashboardPage />
+            </AdminRoute>
+          } />
+          <Route path="fix/:feedbackId" element={
+            <AdminRoute>
+              <FixStatusPage />
             </AdminRoute>
           } />
           <Route index element={<Navigate to="home" replace />} />
