@@ -34,7 +34,7 @@ const FixStatusPage: React.FC = () => {
 
   useEffect(() => {
     fetchLogs();
-    let interval: NodeJS.Timeout;
+    let interval: any;
     if (autoRefresh) {
       interval = setInterval(fetchLogs, 3000);
     }
@@ -63,7 +63,7 @@ const FixStatusPage: React.FC = () => {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <Link to="/app/admin" style={{ color: 'var(--color-text-secondary)', hover: { color: '#fff' } }}>
+            <Link to="/app/admin" style={{ color: 'var(--color-text-secondary)' }}>
               <ArrowLeft size={24} />
             </Link>
             <div>
@@ -120,7 +120,7 @@ const FixStatusPage: React.FC = () => {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {logs.map((log, index) => (
+                {logs.map((log) => (
                   <div key={log.id} style={{ display: 'flex', gap: 16 }}>
                     <span style={{ color: 'rgba(255,255,255,0.2)', minWidth: '80px', fontSize: '0.75rem', paddingTop: '3px' }}>
                       {new Date(log.createdAt).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
