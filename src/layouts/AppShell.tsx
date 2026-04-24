@@ -20,6 +20,7 @@ import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { isNativeApp } from '../utils/platform';
 import styles from './AppShell.module.css';
+import FeedbackWidget from '../components/FeedbackWidget';
 
 
 const AppShell: React.FC = () => {
@@ -106,7 +107,6 @@ const AppShell: React.FC = () => {
         }
     }, [isNativeApp]);
 
-    /*
     const urlBase64ToUint8Array = (base64String: string) => {
         const padding = '='.repeat((4 - base64String.length % 4) % 4);
         const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
@@ -117,7 +117,6 @@ const AppShell: React.FC = () => {
         }
         return outputArray;
     }
-    */
 
     const enableNotifications = async () => {
         if (!('Notification' in window)) return;
@@ -125,8 +124,8 @@ const AppShell: React.FC = () => {
             const permission = await Notification.requestPermission();
             if (permission !== 'granted') return;
             setShowNotifBanner(false);
-            /* 
-            // Register Service Worker - DISABLED TEMPORARILY TO FIX CACHE SYNC
+            
+            // Register Service Worker for Web Push
             if ('serviceWorker' in navigator) {
                 const register = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
                 const { data: { publicKey } } = await import('../api/client').then(m => m.default.get('/notifications/vapid-key'));
@@ -136,19 +135,23 @@ const AppShell: React.FC = () => {
                 });
                 await import('../api/client').then(m => m.default.post('/notifications/subscribe', subscription));
             }
-            */
         } catch (error) {
             console.error("Error subscribing", error);
         }
     };
 
-    const navItems = [
+    const baseNavItems = [
         { path: '/app/home', icon: RiHome5Line, activeIcon: RiHome5Fill, label: 'Home' },
         { path: '/app/dashboard', icon: RiDashboardLine, activeIcon: RiDashboardFill, label: 'Dashboard' },
         { path: '/app/dreams', icon: RiMoonClearLine, activeIcon: RiMoonClearFill, label: 'Dreams' },
         { path: '/app/tasks', icon: RiCheckboxCircleLine, activeIcon: RiCheckboxCircleFill, label: 'Tasks' },
         { path: '/app/settings', icon: RiSettings4Line, activeIcon: RiSettings4Fill, label: 'Settings' },
     ];
+
+    const { user } = useAuth();
+    const navItems = user?.email === 'pidugubunny534@gmail.com'
+        ? [...baseNavItems, { path: '/app/admin', icon: RiCheckboxCircleLine, activeIcon: RiCheckboxCircleFill, label: 'Admin' }]
+        : baseNavItems;
 
     const handleLogout = () => {
         logout();
@@ -283,6 +286,9 @@ const AppShell: React.FC = () => {
                     <RiLogoutBoxLine className={styles.icon} />
                 </button>
             </nav>
+
+            {/* Smart Feedback Widget */}
+            <FeedbackWidget />
         </div>
     );
 };

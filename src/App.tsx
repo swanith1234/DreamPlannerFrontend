@@ -19,6 +19,7 @@ import DashboardPage from './pages/DashboardPage';
 import RoadmapPage from './pages/RoadmapPage';
 import AssessmentPage from './pages/AssessmentPage';
 import RoadmapRedirect from './components/RoadmapRedirect';
+import AdminDashboardPage from './pages/AdminDashboardPage';
 
 // ─── Protected Route ──────────────────────────────────────────────────────────
 
@@ -26,6 +27,14 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   const { isAuthenticated, loading } = useAuth();
   if (loading) return <div>Loading...</div>;
   if (!isAuthenticated) return <Navigate to="/login" />;
+  return <>{children}</>;
+};
+
+const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, isAuthenticated, loading } = useAuth();
+  if (loading) return <div>Loading...</div>;
+  if (!isAuthenticated) return <Navigate to="/login" />;
+  if (user?.email !== 'pidugubunny534@gmail.com') return <Navigate to="/app/home" />;
   return <>{children}</>;
 };
 
@@ -55,6 +64,11 @@ const AnimatedRoutes: React.FC = () => {
           <Route path="tasks" element={<TasksPage />} />
           <Route path="tasks/:taskId" element={<TaskDetailPage />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="admin" element={
+            <AdminRoute>
+              <AdminDashboardPage />
+            </AdminRoute>
+          } />
           <Route index element={<Navigate to="home" replace />} />
         </Route>
       </Routes>
