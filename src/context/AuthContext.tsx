@@ -25,22 +25,14 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // Wakes up the Render backend + checks auth within a timeout.
 // If the backend takes > 12 s (cold start), we treat the user as not logged in
 // so the UI doesn't stay black forever — the user can try again once it's warm.
-const TIMEOUT_MS = 12_000;
+
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
-    const [timedOut, setTimedOut] = useState(false);
 
     useEffect(() => {
         const controller = new AbortController();
-
-        // Safety valve — if backend is cold-starting, don't block UI forever
-        const timer = setTimeout(() => {
-            controller.abort();
-            setTimedOut(true);
-            setLoading(false);
-        }, TIMEOUT_MS);
 
         const checkAuth = async () => {
             try {
@@ -48,7 +40,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     signal: controller.signal,
                 });
                 setUser(data.user);
-                clearTimeout(timer);
                 setLoading(false);
             } catch (error: any) {
                 // Ignore aborts from React Strict Mode double-mounting
@@ -56,9 +47,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     return; // Do NOT set loading to false; let the second mount finish
                 }
                 
-                // Aborted by timeout or genuine 401 — either way, not authenticated right now
                 setUser(null);
-                clearTimeout(timer);
                 setLoading(false);
             }
         };
@@ -67,7 +56,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         return () => {
             controller.abort();
-            clearTimeout(timer);
         };
     }, []);
 
