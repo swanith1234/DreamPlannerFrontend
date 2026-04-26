@@ -150,6 +150,26 @@ const TypedLoading: React.FC<{ text: string }> = ({ text }) => {
     );
 };
 
+import useSWR from 'swr';
+
+// ── Skeleton Loader ──────────────────────────────────────────────────────────
+
+const MessageSkeleton: React.FC = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+        {[1, 2, 3].map(i => (
+            <div key={i} style={{
+                alignSelf: i % 2 === 0 ? 'flex-end' : 'flex-start',
+                width: i % 2 === 0 ? '60%' : '75%',
+                height: '48px',
+                background: 'rgba(255,255,255,0.05)',
+                borderRadius: '16px',
+                animation: 'pulse 1.5s infinite ease-in-out',
+            }} />
+        ))}
+        <style>{`@keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 0.8; } 100% { opacity: 0.5; } }`}</style>
+    </div>
+);
+
 // ── Main HomePage (AI Chat) ───────────────────────────────────────────────────
 
 const HomePage: React.FC = () => {
@@ -167,7 +187,18 @@ const HomePage: React.FC = () => {
 
     const { isTourMode } = useTour();
 
-    // Initial fetch for history
+    // SWR fetchers
+    const { data: prefData, isLoading: prefLoading } = useSWR(
+        !isTourMode ? '/users/preferences' : null,
+        url => api.get(url).then(res => res.data)
+    );
+
+    const { data: historyData, isLoading: historyLoading } = useSWR(
+        !isTourMode ? '/chat/history?limit=30' : null,
+        url => api.get(url).then(res => res.data)
+    );
+
+    // Sync SWR data to state
     useEffect(() => {
         if (isTourMode) {
             setAgentName("The Architect");
@@ -182,43 +213,30 @@ const HomePage: React.FC = () => {
             return;
         }
 
-        const fetchInitialHistory = async () => {
-             try {
-                 // Fetch names
-                 const prefRes = await api.get('/users/preferences');
-                 const prefs = prefRes.data;
-                 const userName = prefs?.user?.name || 'Architect';
-                 const aName = prefs?.agentName || `Future ${userName}`;
-                 const pName = prefs?.preferredName || userName;
-                 setAgentName(aName);
+        if (prefData) {
+            const userName = prefData?.user?.name || 'Architect';
+            const aName = prefData?.agentName || `Future ${userName}`;
+            setAgentName(aName);
+        }
 
-                 const { data } = await api.get('/chat/history', { params: { limit: 30 } });
-                 if (data && data.length > 0) {
-                     setMessages(data);
-                     setHasMore(data.length === 30);
-                     api.patch('/chat/seen').catch(() => {});
-                 } else {
-                     setHasMore(false);
-                     setMessages([{
-                         id: crypto.randomUUID(),
-                         text: `Hey ${pName || 'there'}! What are we crushing today? 🔥`,
-                         sender: 'AI',
-                         timestamp: Date.now(),
-                     }]);
-                 }
-             } catch (err: any) {
-                 console.error("Failed to fetch chat history:", err);
-                 setHasMore(false);
-                 setMessages([{
-                     id: crypto.randomUUID(),
-                     text: "Hey! What are we crushing today? 🔥",
-                     sender: 'AI',
-                     timestamp: Date.now(),
-                 }]);
-             }
-        };
-        fetchInitialHistory();
-    }, [isTourMode]);
+        if (historyData) {
+            if (historyData.length > 0) {
+                setMessages(historyData);
+                setHasMore(historyData.length === 30);
+                api.patch('/chat/seen').catch(() => {});
+            } else {
+                setHasMore(false);
+                setMessages([{
+                    id: crypto.randomUUID(),
+                    text: `Hey! What are we crushing today? 🔥`,
+                    sender: 'AI',
+                    timestamp: Date.now(),
+                }]);
+            }
+        }
+    }, [prefData, historyData, isTourMode]);
+
+    const initialLoading = !isTourMode && (prefLoading || (historyLoading && messages.length === 0));
 
     // Load older messages (Pagination)
     const loadMore = async () => {
@@ -414,8 +432,14 @@ const HomePage: React.FC = () => {
                     )}
 
                     <AnimatePresence initial={false}>
-                        {messages.map(msg => <MessageBubble key={msg.id} msg={msg} />)}
-                        {isTyping && <TypingIndicator key="typing" />}
+                        {initialLoading ? (
+                            <MessageSkeleton />
+                        ) : (
+                            <>
+                                {messages.map(msg => <MessageBubble key={msg.id} msg={msg} />)}
+                                {isTyping && <TypingIndicator key="typing" />}
+                            </>
+                        )}
                     </AnimatePresence>
                     <div ref={bottomRef} />
                 </div>

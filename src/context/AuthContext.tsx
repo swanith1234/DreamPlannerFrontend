@@ -87,35 +87,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return (
         <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, logout, loading }}>
-            {loading ? (
-                // Full-screen loading state shown while waiting for /auth/me
-                // Prevents the black screen on Render cold starts
-                <div style={{
-                    height: '100dvh',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    background: 'var(--color-bg, #0a0a12)',
-                    gap: '20px',
-                }}>
-                    <div style={{
-                        width: 48,
-                        height: 48,
-                        borderRadius: '50%',
-                        border: '3px solid rgba(108,99,255,0.2)',
-                        borderTopColor: '#6c63ff',
-                        borderRightColor: '#00d4ff',
-                        animation: 'spin 1.2s linear infinite',
-                    }} />
-                    <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.85rem', margin: 0 }}>
-                        {timedOut ? 'Backend waking up… please wait' : 'Loading…'}
-                    </p>
-                    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-                </div>
-            ) : (
-                children
-            )}
+            {children}
         </AuthContext.Provider>
     );
 };

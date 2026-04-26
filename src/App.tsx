@@ -26,14 +26,18 @@ import FixStatusPage from './pages/FixStatusPage';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
-  if (loading) return <div>Loading...</div>;
-  if (!isAuthenticated) return <Navigate to="/login" />;
+  
+  // If we are finished loading and not authenticated, redirect
+  if (!loading && !isAuthenticated) return <Navigate to="/login" />;
+  
+  // Otherwise, render the shell (which will show skeletons if loading)
   return <>{children}</>;
 };
 
 const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isAuthenticated, loading } = useAuth();
-  if (loading) return <div>Loading...</div>;
+  
+  if (loading) return null; // Admin routes are specific, we can wait or show a small spinner
   if (!isAuthenticated) return <Navigate to="/login" />;
   if (user?.email !== 'pidugubunny534@gmail.com') return <Navigate to="/app/home" />;
   return <>{children}</>;
