@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RiAddLine, RiTimeLine, RiFireLine, RiEditLine, RiDeleteBinLine, RiRoadMapLine } from 'react-icons/ri';
@@ -46,7 +46,7 @@ const DreamsPage: React.FC = () => {
     const { isTourMode } = useTour();
 
     // SWR for deduplicated and cached fetching
-    const { data: dreamsRes, error, isLoading } = useSWR(
+    const { data: dreamsRes, isLoading } = useSWR(
         !isTourMode ? '/dreams' : null,
         url => api.get(url).then(res => res.data),
         {

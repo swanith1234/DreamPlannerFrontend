@@ -391,7 +391,7 @@ const DashboardPage: React.FC = () => {
     // Fetch dashboard data
     const { data: dashboardData, error, isLoading } = useSWR(
         isTourMode ? null : ['/analytics/dashboard', selectedSprint],
-        ([url, sprint]) => {
+        ([_, sprint]) => {
             if (sprint === 'current') {
                 return analyticsApi.getWeeklyDashboard();
             } else {
