@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import useSWR from 'swr';
 import { Terminal, ArrowLeft, RefreshCw, CheckCircle2, AlertCircle, Loader2, Activity } from 'lucide-react';
 import api from '../api/client';
 import PageTransition from '../components/PageTransition';
@@ -14,38 +15,26 @@ interface PipelineLog {
 
 const FixStatusPage: React.FC = () => {
   const { feedbackId } = useParams<{ feedbackId: string }>();
-  const [logs, setLogs] = useState<PipelineLog[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const logEndRef = useRef<HTMLDivElement>(null);
 
-  const fetchLogs = async () => {
-    try {
-      const res = await api.get(`/admin/feedback/${feedbackId}/logs`);
-      setLogs(res.data.logs);
-      setError(null);
-    } catch (err: any) {
-      setError(err?.response?.data?.error || 'Failed to load pipeline logs');
-    } finally {
-      setLoading(false);
+  const { data, error, isLoading } = useSWR<{ logs: PipelineLog[] }>(
+    feedbackId ? `/admin/feedback/${feedbackId}/logs` : null,
+    url => api.get(url).then(res => res.data),
+    {
+      refreshInterval: autoRefresh ? 3000 : 0,
+      revalidateOnFocus: true,
+      dedupingInterval: 1000
     }
-  };
+  );
 
-  useEffect(() => {
-    fetchLogs();
-    let interval: any;
-    if (autoRefresh) {
-      interval = setInterval(fetchLogs, 3000);
-    }
-    return () => clearInterval(interval);
-  }, [feedbackId, autoRefresh]);
+  const logs = data?.logs || [];
 
   useEffect(() => {
     if (logEndRef.current) {
       logEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [logs]);
+  }, [logs.length]);
 
   const getLevelColor = (level: string) => {
     switch (level) {
@@ -104,7 +93,7 @@ const FixStatusPage: React.FC = () => {
 
           {/* Console Body */}
           <div style={{ height: '600px', overflowY: 'auto', padding: '20px', fontFamily: '"Fira Code", monospace', fontSize: '0.9rem', lineBreak: 'anywhere' }}>
-            {loading && logs.length === 0 ? (
+            {isLoading && logs.length === 0 ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'var(--color-text-secondary)' }}>
                 <Loader2 size={18} className="animate-spin" />
                 Initializing pipeline connection...
@@ -112,7 +101,7 @@ const FixStatusPage: React.FC = () => {
             ) : error ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: '#ff4c4c' }}>
                 <AlertCircle size={18} />
-                {error}
+                {error.message || 'Failed to load pipeline logs'}
               </div>
             ) : logs.length === 0 ? (
               <div style={{ color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>

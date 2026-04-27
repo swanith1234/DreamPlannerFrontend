@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { motion } from 'framer-motion';
+import useSWR from 'swr';
 import { analyticsApi, type SprintDashboard } from '../api/analytics';
 import {
     RiTrophyFill, RiFlashlightFill, RiCheckboxCircleFill,
@@ -369,14 +370,9 @@ const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
 const DashboardPage: React.FC = () => {
-    const [data, setData] = useState<SprintDashboard | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
     const [windowWidth, setWindowWidth] = useState(window.innerWidth);
-
-    // Sprint Picker
-    const [sprints, setSprints] = useState<any[]>([]);
     const [selectedSprint, setSelectedSprint] = useState<string>('current');
+    const { isTourMode } = useTour();
 
     useEffect(() => {
         const onResize = () => setWindowWidth(window.innerWidth);
@@ -386,55 +382,22 @@ const DashboardPage: React.FC = () => {
 
     const isMobile = windowWidth < 768;
 
-    // Fech past sprints on mount
-    useEffect(() => {
-        analyticsApi.listSprints().then(setSprints).catch(console.error);
-    }, []);
+    // Fetch past sprints
+    const { data: sprints = [] } = useSWR(
+        !isTourMode ? '/analytics/sprints' : null,
+        () => analyticsApi.listSprints()
+    );
 
-    const { isTourMode } = useTour();
-
-    useEffect(() => {
-        setLoading(true);
-        setError(null);
-        
-        if (isTourMode) {
-            // High UX Mock Data
-            setTimeout(() => {
-                setData({
-                    sprintWindow: { start: '2026-04-14', end: '2026-04-20' },
-                    checkpoints: {
-                        planned: { count: 12, items: [] },
-                        earlyCompleted: { count: 2, items: [] },
-                        onTimeCompleted: { count: 8, items: [] },
-                        recovered: { count: 2, items: [] },
-                        overduePending: { count: 0, items: [] },
-                    },
-                    rates: { executionRate: 100, recoveryRate: 100 },
-                    activity: {
-                        activeDays: 6, missedDays: 1, overachievementDays: 2,
-                        totalEffort: 550,
-                        dailyEffort: {
-                            '2026-04-14': 80, '2026-04-15': 120, '2026-04-16': 90,
-                            '2026-04-17': 0, '2026-04-18': 100, '2026-04-19': 60, '2026-04-20': 100
-                        }
-                    },
-                    scores: { consistency: 84, intensity: 88, disciplineScore: 92 }
-                });
-                setLoading(false);
-            }, 500); // give tiny delay for layout transition
-            return;
-        }
-
-        if (selectedSprint === 'current') {
-            analyticsApi.getWeeklyDashboard()
-                .then(setData)
-                .catch(e => setError(e.message))
-                .finally(() => setLoading(false));
-        } else {
-            analyticsApi.getSprintByWeekStart(selectedSprint)
-                .then((snapshot: any) => {
+    // Fetch dashboard data
+    const { data: dashboardData, error, isLoading } = useSWR(
+        isTourMode ? null : ['/analytics/dashboard', selectedSprint],
+        ([url, sprint]) => {
+            if (sprint === 'current') {
+                return analyticsApi.getWeeklyDashboard();
+            } else {
+                return analyticsApi.getSprintByWeekStart(sprint).then((snapshot: any) => {
                     const onTime = Math.max(0, snapshot.totalCheckpointsCompleted - snapshot.earlyStarts - snapshot.recovered);
-                    setData({
+                    return {
                         sprintWindow: {
                             start: snapshot.weekStart.slice(0, 10),
                             end: snapshot.weekEnd.slice(0, 10),
@@ -462,14 +425,41 @@ const DashboardPage: React.FC = () => {
                             intensity: snapshot.intensityScore,
                             disciplineScore: snapshot.disciplineScore,
                         },
-                    });
-                })
-                .catch(e => setError(e.message))
-                .finally(() => setLoading(false));
+                    };
+                });
+            }
+        },
+        {
+            revalidateOnFocus: false,
+            dedupingInterval: 5000
         }
-    }, [selectedSprint, isTourMode]);
+    );
 
-    if (loading) return (
+    // Mock data for tour mode
+    const tourData: SprintDashboard = {
+        sprintWindow: { start: '2026-04-14', end: '2026-04-20' },
+        checkpoints: {
+            planned: { count: 12, items: [] },
+            earlyCompleted: { count: 2, items: [] },
+            onTimeCompleted: { count: 8, items: [] },
+            recovered: { count: 2, items: [] },
+            overduePending: { count: 0, items: [] },
+        },
+        rates: { executionRate: 100, recoveryRate: 100 },
+        activity: {
+            activeDays: 6, missedDays: 1, overachievementDays: 2,
+            totalEffort: 550,
+            dailyEffort: {
+                '2026-04-14': 80, '2026-04-15': 120, '2026-04-16': 90,
+                '2026-04-17': 0, '2026-04-18': 100, '2026-04-19': 60, '2026-04-20': 100
+            }
+        },
+        scores: { consistency: 84, intensity: 88, disciplineScore: 92 }
+    };
+
+    const data = isTourMode ? tourData : dashboardData;
+
+    if (isLoading && !isTourMode) return (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', gap: 16 }}>
             <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.5, ease: 'linear' }}
                 style={{ width: 48, height: 48, borderRadius: '50%', border: '3px solid transparent', borderTopColor: '#6c63ff', borderRightColor: '#00d4ff' }} />
@@ -477,13 +467,13 @@ const DashboardPage: React.FC = () => {
         </div>
     );
 
-    if (error || !data) return (
+    if ((error || !data) && !isTourMode) return (
         <div style={{ padding: 40, color: 'rgba(255,100,100,0.8)', textAlign: 'center' }}>
             <RiAlertFill size={40} /><p style={{ marginTop: 12 }}>Failed to load analytics. Check your connection.</p>
         </div>
     );
 
-    const { sprintWindow, checkpoints, rates, activity, scores } = data;
+    const { sprintWindow, checkpoints, rates, activity, scores } = data!;
     const verdict = getVerdict(scores.disciplineScore);
     const totalCompleted = checkpoints.earlyCompleted.count + checkpoints.onTimeCompleted.count + checkpoints.recovered.count;
 
@@ -513,7 +503,7 @@ const DashboardPage: React.FC = () => {
                     }}
                 >
                     <option value="current" style={{ color: 'black' }}>Current Sprint</option>
-                    {sprints.map(s => (
+                    {sprints.map((s: any) => (
                         <option key={s.id} value={s.weekStart.slice(0, 10)} style={{ color: 'black' }}>
                             {fmt(s.weekStart.slice(0, 10))} – {fmt(s.weekEnd.slice(0, 10))}
                         </option>

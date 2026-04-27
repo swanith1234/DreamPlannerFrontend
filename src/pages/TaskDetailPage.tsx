@@ -1,7 +1,7 @@
-
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import useSWR, { mutate } from 'swr';
 import {
     RiArrowLeftLine, RiTimeLine, RiCheckboxCircleLine,
     RiEditLine, RiDeleteBinLine,
@@ -40,8 +40,6 @@ interface Task {
 const TaskDetailPage: React.FC = () => {
     const { taskId } = useParams<{ taskId: string }>();
     const navigate = useNavigate();
-    const [task, setTask] = useState<Task | null>(null);
-    const [loading, setLoading] = useState(true);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [windowWidth, setWindowWidth] = useState(window.innerWidth);
@@ -54,6 +52,16 @@ const TaskDetailPage: React.FC = () => {
 
     const isMobile = windowWidth < 768;
 
+    // SWR for deduplicated fetching
+    const { data: task, error, isLoading } = useSWR<Task>(
+        taskId ? `/tasks/${taskId}` : null,
+        url => api.get(url).then(res => res.data),
+        {
+            revalidateOnFocus: false,
+            dedupingInterval: 5000
+        }
+    );
+
     // Edit Task State
     const [editTitle, setEditTitle] = useState('');
     const [editDescription, setEditDescription] = useState('');
@@ -63,40 +71,26 @@ const TaskDetailPage: React.FC = () => {
     const [editingCheckpoint, setEditingCheckpoint] = useState<string | null>(null);
     const [editValue, setEditValue] = useState('');
     const [deletingCheckpointId, setDeletingCheckpointId] = useState<string | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
-        fetchTask();
-    }, [taskId]);
-
-    const fetchTask = async () => {
-        try {
-            const res = await api.get(`/tasks/${taskId}`);
-            setTask(res.data);
-            setEditTitle(res.data.title);
-            setEditDescription(res.data.description || '');
-            setEditDeadline(res.data.deadline ? new Date(res.data.deadline).toISOString().split('T')[0] : '');
-            setLoading(false);
-        } catch (error) {
-            console.error("Failed to fetch task", error);
-            setLoading(false);
+        if (task) {
+            setEditTitle(task.title);
+            setEditDescription(task.description || '');
+            setEditDeadline(task.deadline ? new Date(task.deadline).toISOString().split('T')[0] : '');
         }
-    };
+    }, [task]);
 
     const handleCycleProgress = async (cp: TaskCheckpoint) => {
-        // Guard: only the active checkpoint (server-derived) can be updated
-        if (!cp.isActive) return;
+        if (!cp.isActive || !task) return;
 
         try {
-            // Forward-only: progress increases by 25. Capped at 100.
             const newProgress = Math.min(cp.progress + 25, 100);
-            const delta = newProgress - cp.progress; // always positive
-
-            // Capture user's local calendar date (browser timezone) to send to the server.
-            // This prevents server-timezone mismatch (e.g. server in UTC, user in IST).
+            const delta = newProgress - cp.progress;
             const now = new Date();
             const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+            
             // Optimistic update
-            if (!task) return;
             const updatedCheckpoints = task.checkpoints.map(c =>
                 c.id === cp.id
                     ? { ...c, progress: newProgress, isCompleted: newProgress === 100, isActive: newProgress < 100 }
@@ -104,16 +98,14 @@ const TaskDetailPage: React.FC = () => {
             );
             const totalProgressSum = updatedCheckpoints.reduce((sum, c) => sum + Math.min(c.progress || 0, 100), 0);
             const newTotalProgress = updatedCheckpoints.length > 0 ? Math.round(totalProgressSum / updatedCheckpoints.length) : 0;
-            setTask({ ...task, checkpoints: updatedCheckpoints, progressPercent: newTotalProgress });
+            
+            mutate(`/tasks/${taskId}`, { ...task, checkpoints: updatedCheckpoints, progressPercent: newTotalProgress }, false);
 
-            // API: send DELTA + localDate, not absolute
             await api.post(`/tasks/${task.id}/checkpoints/${cp.id}/progress`, { delta, localDate });
-
-            // Refresh to get server-side state (next checkpoint now ACTIVE, etc.)
-            fetchTask();
+            mutate(`/tasks/${taskId}`);
         } catch (error) {
             console.error('Failed to update progress', error);
-            fetchTask(); // Revert on error
+            mutate(`/tasks/${taskId}`);
         }
     };
 
@@ -123,34 +115,42 @@ const TaskDetailPage: React.FC = () => {
                 title: editValue
             });
             setEditingCheckpoint(null);
-            fetchTask();
+            mutate(`/tasks/${taskId}`);
         } catch (error) {
             console.error("Failed to update checkpoint", error);
         }
     };
 
     const handleDeleteTask = async () => {
+        setIsSubmitting(true);
         try {
             await api.delete(`/tasks/${taskId}`);
+            mutate('/tasks');
             navigate('/app/tasks');
         } catch (error) {
             console.error("Failed to delete task", error);
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
     const handleDeleteCheckpoint = async () => {
         if (!deletingCheckpointId || !task) return;
+        setIsSubmitting(true);
         try {
             await api.delete(`/tasks/${task.id}/checkpoints/${deletingCheckpointId}`);
             setDeletingCheckpointId(null);
-            fetchTask();
+            mutate(`/tasks/${taskId}`);
         } catch (error) {
             console.error('Failed to delete checkpoint', error);
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
     const handleUpdateTask = async (e: React.FormEvent) => {
         e.preventDefault();
+        setIsSubmitting(true);
         try {
             await api.put(`/tasks/${taskId}`, {
                 title: editTitle,
@@ -158,14 +158,16 @@ const TaskDetailPage: React.FC = () => {
                 deadline: new Date(editDeadline).toISOString()
             });
             setShowEditModal(false);
-            fetchTask();
+            mutate(`/tasks/${taskId}`);
         } catch (error) {
             console.error("Failed to update task", error);
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
-    if (loading) return <PageLoader />;
-    if (!task) return <div style={{ padding: '2rem', color: 'white' }}>Task not found</div>;
+    if (isLoading || isSubmitting) return <PageLoader />;
+    if (error || !task) return <div style={{ padding: '2rem', color: 'white' }}>Task not found</div>;
 
     const getDerivedStatus = (progress: number) => {
         if (progress === 100) return 'COMPLETED';
@@ -175,9 +177,8 @@ const TaskDetailPage: React.FC = () => {
 
     const derivedStatus = getDerivedStatus(task.progressPercent || 0);
     const isCompleted = derivedStatus === 'COMPLETED';
-    const progressColor = isCompleted ? '#4CAF50' : '#4F46E5'; // Success green or primary brand color
+    const progressColor = isCompleted ? '#4CAF50' : '#4F46E5'; 
 
-    // Radius for circular progress
     const radius = 60;
     const circumference = 2 * Math.PI * radius;
     const strokeDashoffset = circumference - ((task.progressPercent || 0) / 100) * circumference;
@@ -185,7 +186,6 @@ const TaskDetailPage: React.FC = () => {
     return (
         <PageTransition>
             <div style={{ maxWidth: '1000px', margin: '0 auto', paddingBottom: '40px' }}>
-                {/* Back Link */}
                 <button
                     onClick={() => navigate('/app/tasks')}
                     style={{
@@ -198,11 +198,7 @@ const TaskDetailPage: React.FC = () => {
                 </button>
 
                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 350px', gap: '32px' }}>
-
-                    {/* Left Column: Details & Timeline */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-
-                        {/* Header Box */}
                         <GlassCard style={{ padding: '32px', position: 'relative', overflow: 'hidden' }}>
                             <div style={{ position: 'relative', zIndex: 2 }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '16px' }}>
@@ -222,7 +218,6 @@ const TaskDetailPage: React.FC = () => {
                                         )}
                                     </div>
                                     <div style={{ display: 'flex', gap: '8px' }}>
-                                        {/* Actions */}
                                         <button
                                             onClick={() => setShowEditModal(true)}
                                             style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', padding: '8px', borderRadius: '8px', cursor: 'pointer' }}
@@ -255,7 +250,6 @@ const TaskDetailPage: React.FC = () => {
                             </div>
                         </GlassCard>
 
-                        {/* Checkpoints Timeline */}
                         <div style={{ position: 'relative', paddingLeft: '16px' }}>
                             <h3 style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
                                 <RiCheckDoubleLine color="#4F46E5" /> Mission Checkpoints
@@ -268,8 +262,6 @@ const TaskDetailPage: React.FC = () => {
 
                                     return (
                                         <div key={cp.id} style={{ display: 'flex', gap: '20px', position: 'relative', paddingBottom: isLast ? 0 : '32px' }}>
-
-                                            {/* Timeline Line */}
                                             {!isLast && (
                                                 <div style={{
                                                     position: 'absolute', left: '11px', top: '28px', bottom: '0', width: '2px',
@@ -277,7 +269,6 @@ const TaskDetailPage: React.FC = () => {
                                                 }} />
                                             )}
 
-                                            {/* Circular Progress Icon */}
                                             {(() => {
                                                 const isActive = cp.isActive;
                                                 const isDone = cp.isCompleted;
@@ -299,13 +290,11 @@ const TaskDetailPage: React.FC = () => {
                                                             transition: 'opacity 0.2s, filter 0.2s',
                                                         }}
                                                     >
-                                                        {/* Background Track */}
                                                         <svg width="32" height="32" style={{ transform: 'rotate(-90deg)', position: 'absolute' }}>
                                                             <circle
                                                                 cx="16" cy="16" r="14"
                                                                 stroke="rgba(255,255,255,0.1)" strokeWidth="3" fill="transparent"
                                                             />
-                                                            {/* Progress Fill */}
                                                             <motion.circle
                                                                 initial={false}
                                                                 animate={{ strokeDashoffset: 88 - (88 * (cp.progress || 0)) / 100 }}
@@ -317,7 +306,6 @@ const TaskDetailPage: React.FC = () => {
                                                                 strokeLinecap="round"
                                                             />
                                                         </svg>
-                                                        {/* Center Text/Icon */}
                                                         <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'white', zIndex: 3 }}>
                                                             {cp.progress === 100 ? (
                                                                 <RiCheckboxCircleLine color="#4CAF50" size={16} />
@@ -329,7 +317,6 @@ const TaskDetailPage: React.FC = () => {
                                                 );
                                             })()}
 
-                                            {/* Content */}
                                             <div style={{ flex: 1, marginTop: '-2px' }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                                                     {editingCheckpoint === cp.id ? (
@@ -391,41 +378,21 @@ const TaskDetailPage: React.FC = () => {
                                 })}
                             </div>
                         </div>
-
                     </div>
 
-                    {/* Right Column: Progress */}
                     <div>
                         <GlassCard style={{ padding: '32px', textAlign: 'center', position: 'sticky', top: '24px' }}>
                             <h3 style={{ marginBottom: '24px' }}>Progress Overview</h3>
-
                             <div style={{ position: 'relative', width: '160px', height: '160px', margin: '0 auto 24px' }}>
-                                {/* Background Circle */}
                                 <svg width="160" height="160" style={{ transform: 'rotate(-90deg)' }}>
-                                    <circle
-                                        stroke="rgba(255,255,255,0.1)"
-                                        strokeWidth="8"
-                                        fill="transparent"
-                                        r={radius}
-                                        cx="80"
-                                        cy="80"
-                                    />
-                                    {/* Progress Circle */}
+                                    <circle stroke="rgba(255,255,255,0.1)" strokeWidth="8" fill="transparent" r={radius} cx="80" cy="80" />
                                     <motion.circle
                                         initial={{ strokeDashoffset: circumference }}
                                         animate={{ strokeDashoffset }}
                                         transition={{ duration: 1, ease: 'easeOut' }}
-                                        stroke={progressColor}
-                                        strokeWidth="8"
-                                        strokeLinecap="round"
-                                        fill="transparent"
-                                        r={radius}
-                                        cx="80"
-                                        cy="80"
-                                        strokeDasharray={circumference}
+                                        stroke={progressColor} strokeWidth="8" strokeLinecap="round" fill="transparent" r={radius} cx="80" cy="80" strokeDasharray={circumference}
                                     />
                                 </svg>
-
                                 <div style={{
                                     position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
                                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
@@ -434,143 +401,73 @@ const TaskDetailPage: React.FC = () => {
                                     <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>Completed</span>
                                 </div>
                             </div>
-
                             <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem', lineHeight: 1.5 }}>
                                 "Progress reflects what you’ve shared so far."
                             </p>
                         </GlassCard>
                     </div>
-
                 </div>
 
-                {/* Delete Modal */}
                 <AnimatePresence>
                     {showDeleteModal && (
                         <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            style={{
-                                position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-                                background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', zIndex: 1000,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'
-                            }}
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
                             onClick={() => setShowDeleteModal(false)}
                         >
-                            <GlassCard
-                                style={{ width: '100%', maxWidth: '400px', padding: '32px', textAlign: 'center' }}
-                                onClick={(e) => e.stopPropagation()}
-                            >
+                            <GlassCard style={{ width: '100%', maxWidth: '400px', padding: '32px', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
                                 <h3 style={{ marginBottom: '16px' }}>Delete Mission?</h3>
-                                <p style={{ color: 'var(--color-text-secondary)', marginBottom: '24px' }}>
-                                    This will stop reminders for this task. Continue?
-                                </p>
+                                <p style={{ color: 'var(--color-text-secondary)', marginBottom: '24px' }}>This will stop reminders for this task. Continue?</p>
                                 <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
                                     <GlowButton variant="ghost" onClick={() => setShowDeleteModal(false)}>Cancel</GlowButton>
-                                    <button
-                                        onClick={handleDeleteTask}
-                                        style={{
-                                            background: '#ff6b6b', color: 'white', border: 'none',
-                                            padding: '10px 24px', borderRadius: '8px', fontWeight: 600, cursor: 'pointer'
-                                        }}
-                                    >
-                                        Delete
-                                    </button>
+                                    <button onClick={handleDeleteTask} style={{ background: '#ff6b6b', color: 'white', border: 'none', padding: '10px 24px', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>Delete</button>
                                 </div>
                             </GlassCard>
                         </motion.div>
                     )}
                 </AnimatePresence>
 
-                {/* Checkpoint Delete Confirmation Modal */}
                 <AnimatePresence>
                     {deletingCheckpointId && (
                         <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            style={{
-                                position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-                                background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', zIndex: 1000,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'
-                            }}
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
                             onClick={() => setDeletingCheckpointId(null)}
                         >
-                            <GlassCard
-                                style={{ width: '100%', maxWidth: '400px', padding: '32px', textAlign: 'center' }}
-                                onClick={(e) => e.stopPropagation()}
-                            >
+                            <GlassCard style={{ width: '100%', maxWidth: '400px', padding: '32px', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
                                 <h3 style={{ marginBottom: '16px' }}>Delete Checkpoint?</h3>
-                                <p style={{ color: 'var(--color-text-secondary)', marginBottom: '8px' }}>
-                                    This will permanently delete this checkpoint and all its daily progress entries from the Day table.
-                                </p>
-                                <p style={{ fontSize: '0.8rem', color: '#ff6b6b', marginBottom: '24px' }}>
-                                    ⚠️ This action cannot be undone.
-                                </p>
+                                <p style={{ color: 'var(--color-text-secondary)', marginBottom: '8px' }}>This will permanently delete this checkpoint and all its daily progress entries.</p>
+                                <p style={{ fontSize: '0.8rem', color: '#ff6b6b', marginBottom: '24px' }}>⚠️ This action cannot be undone.</p>
                                 <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
                                     <GlowButton variant="ghost" onClick={() => setDeletingCheckpointId(null)}>Cancel</GlowButton>
-                                    <button
-                                        onClick={handleDeleteCheckpoint}
-                                        style={{
-                                            background: '#ff6b6b', color: 'white', border: 'none',
-                                            padding: '10px 24px', borderRadius: '8px', fontWeight: 600, cursor: 'pointer'
-                                        }}
-                                    >
-                                        Delete Checkpoint
-                                    </button>
+                                    <button onClick={handleDeleteCheckpoint} style={{ background: '#ff6b6b', color: 'white', border: 'none', padding: '10px 24px', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>Delete Checkpoint</button>
                                 </div>
                             </GlassCard>
                         </motion.div>
                     )}
                 </AnimatePresence>
 
-                {/* Edit Task Modal */}
                 <AnimatePresence>
                     {showEditModal && (
                         <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            style={{
-                                position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-                                background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', zIndex: 1000,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'
-                            }}
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
                             onClick={() => setShowEditModal(false)}
                         >
-                            <GlassCard
-                                style={{ width: '100%', maxWidth: '500px' }}
-                                onClick={(e) => e.stopPropagation()}
-                            >
+                            <GlassCard style={{ width: '100%', maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
                                 <h3 style={{ marginBottom: '24px' }}>Edit Mission</h3>
                                 <form onSubmit={handleUpdateTask}>
                                     <div style={{ marginBottom: '16px' }}>
                                         <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem' }}>Title</label>
-                                        <input
-                                            style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none' }}
-                                            value={editTitle}
-                                            onChange={e => setEditTitle(e.target.value)}
-                                            required
-                                        />
+                                        <input style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none' }} value={editTitle} onChange={e => setEditTitle(e.target.value)} required />
                                     </div>
                                     <div style={{ marginBottom: '16px' }}>
                                         <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem' }}>Description</label>
-                                        <textarea
-                                            style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none', resize: 'vertical' }}
-                                            value={editDescription}
-                                            onChange={e => setEditDescription(e.target.value)}
-                                            rows={3}
-                                        />
+                                        <textarea style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none', resize: 'vertical' }} value={editDescription} onChange={e => setEditDescription(e.target.value)} rows={3} />
                                     </div>
                                     <div style={{ marginBottom: '24px' }}>
                                         <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem' }}>Deadline</label>
-                                        <input
-                                            type="date"
-                                            style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none' }}
-                                            value={editDeadline}
-                                            onChange={e => setEditDeadline(e.target.value)}
-                                            required
-                                        />
+                                        <input type="date" style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none' }} value={editDeadline} onChange={e => setEditDeadline(e.target.value)} required />
                                     </div>
                                     <div style={{ display: 'flex', gap: '16px', justifyContent: 'flex-end' }}>
                                         <GlowButton type="button" variant="ghost" onClick={() => setShowEditModal(false)}>Cancel</GlowButton>

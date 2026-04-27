@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import useSWR, { mutate } from 'swr';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, AreaChart, Area } from 'recharts';
 import { Activity, Bug, Trash2, ArrowRight, Users } from 'lucide-react';
 import api from '../api/client';
@@ -21,38 +22,28 @@ interface DashboardData {
 
 const AdminDashboardPage: React.FC = () => {
   const navigate = useNavigate();
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [timeline, setTimeline] = useState<'week' | 'month' | 'year' | 'all'>('month');
 
-  const fetchDashboard = async () => {
-    try {
-      const res = await api.get(`/admin/dashboard?range=${timeline}`);
-      setData(res.data);
-      setError(null);
-    } catch (err: any) {
-      setError(err?.response?.data?.error || 'Failed to load dashboard');
-    } finally {
-      setLoading(false);
+  const { data, error, isLoading } = useSWR<DashboardData>(
+    `/admin/dashboard?range=${timeline}`,
+    url => api.get(url).then(res => res.data),
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 5000
     }
-  };
-
-  useEffect(() => {
-    fetchDashboard();
-  }, [timeline]);
+  );
 
   const handleAction = async (id: string, action: 'fix' | 'ignore') => {
     try {
       await api.post(`/admin/feedback/${id}/action`, { action });
-      fetchDashboard();
+      mutate(`/admin/dashboard?range=${timeline}`);
     } catch (err) {
       alert('Failed to execute action');
     }
   };
 
-  if (loading && !data) return <div style={{ padding: 40, color: '#fff' }}>Loading Admin Portal...</div>;
-  if (error) return <div style={{ padding: 40, color: 'red' }}>Error: {error}</div>;
+  if (isLoading && !data) return <div style={{ padding: 40, color: '#fff' }}>Loading Admin Portal...</div>;
+  if (error) return <div style={{ padding: 40, color: 'red' }}>Error: {error.message || 'Failed to load dashboard'}</div>;
   if (!data) return null;
 
   return (
@@ -233,8 +224,8 @@ const AdminDashboardPage: React.FC = () => {
                                     f.status === 'IN_PROGRESS' ? 'rgba(0, 242, 234, 0.15)' :
                                     f.status === 'RESOLVED' ? 'rgba(76, 175, 80, 0.15)' : 'rgba(255, 76, 76, 0.15)',
                         color: f.status === 'PENDING' ? '#FFC107' :
-                               f.status === 'IN_PROGRESS' ? 'var(--color-accent)' :
-                               f.status === 'RESOLVED' ? '#4CAF50' : '#FF4C4C'
+                                f.status === 'IN_PROGRESS' ? 'var(--color-accent)' :
+                                f.status === 'RESOLVED' ? '#4CAF50' : '#FF4C4C'
                       }}>
                         {f.status}
                       </span>

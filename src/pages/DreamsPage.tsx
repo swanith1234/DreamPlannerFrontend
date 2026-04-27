@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RiAddLine, RiTimeLine, RiFireLine, RiEditLine, RiDeleteBinLine, RiRoadMapLine } from 'react-icons/ri';
+import useSWR, { mutate } from 'swr';
 import api from '../api/client';
 import GlassCard from '../components/GlassCard';
 import GlowButton from '../components/GlowButton';
@@ -25,7 +26,6 @@ interface Dream {
 
 const DreamsPage: React.FC = () => {
     const navigate = useNavigate();
-    const [dreams, setDreams] = useState<Dream[]>([]);
     const [showCreate, setShowCreate] = useState(false);
     const [showEdit, setShowEdit] = useState(false);
     const [showDelete, setShowDelete] = useState(false);
@@ -41,40 +41,32 @@ const DreamsPage: React.FC = () => {
     const [deadline, setDeadline] = useState('');
     const [impactScore, setImpactScore] = useState(8);
     const [additionalContext, setAdditionalContext] = useState('');
-    const [loading, setLoading] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const { isTourMode } = useTour();
 
-    useEffect(() => {
-        if (isTourMode) {
-            setDreams([{
-                id: 'mock-1',
-                title: MOCK_TOUR_DATA.roadmap.dreamTitle,
-                description: 'Master cloud architecture and build scalable serverless systems seamlessly.',
-                motivationStatement: 'David Goggins. They don\'t know me son.',
-                deadline: '2026-12-01T00:00:00Z',
-                impactScore: 10
-            }]);
-            return;
+    // SWR for deduplicated and cached fetching
+    const { data: dreamsRes, error, isLoading } = useSWR(
+        !isTourMode ? '/dreams' : null,
+        url => api.get(url).then(res => res.data),
+        {
+            revalidateOnFocus: false,
+            dedupingInterval: 5000 // 5s deduping
         }
-        fetchDreams();
-    }, [isTourMode]);
+    );
 
-    const fetchDreams = async () => {
-        setLoading(true);
-        try {
-            const { data } = await api.get('/dreams');
-            setDreams(data.dreams || []);
-        } catch (error) {
-            console.error("Failed to fetch dreams", error);
-        } finally {
-            setLoading(false);
-        }
-    };
+    const dreams: Dream[] = isTourMode ? [{
+        id: 'mock-1',
+        title: MOCK_TOUR_DATA.roadmap.dreamTitle,
+        description: 'Master cloud architecture and build scalable serverless systems seamlessly.',
+        motivationStatement: 'David Goggins. They don\'t know me son.',
+        deadline: '2026-12-01T00:00:00Z',
+        impactScore: 10
+    }] : (dreamsRes?.dreams || []);
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
+        setIsSubmitting(true);
         try {
             const res = await api.post('/dreams', {
                 title,
@@ -89,16 +81,15 @@ const DreamsPage: React.FC = () => {
             });
             setShowCreate(false);
             resetForm();
-            fetchDreams();
+            mutate('/dreams'); // Revalidate SWR cache
             const createdDreamId = res.data?.id;
             if (createdDreamId) {
-                // Immediately suggest/generate roadmap on dedicated page (draft first)
                 navigate(`/app/dreams/${createdDreamId}/roadmap`);
             }
         } catch (error) {
             console.error("Failed to create dream", error);
         } finally {
-            setLoading(false);
+            setIsSubmitting(false);
         }
     };
 
@@ -132,7 +123,7 @@ const DreamsPage: React.FC = () => {
     const handleUpdate = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedDream) return;
-        setLoading(true);
+        setIsSubmitting(true);
         try {
             await api.put(`/dreams/${selectedDream.id}`, {
                 title,
@@ -147,26 +138,26 @@ const DreamsPage: React.FC = () => {
             });
             setShowEdit(false);
             resetForm();
-            fetchDreams();
+            mutate('/dreams');
         } catch (error) {
             console.error("Failed to update dream", error);
         } finally {
-            setLoading(false);
+            setIsSubmitting(false);
         }
     };
 
     const confirmDelete = async () => {
         if (!selectedDream) return;
-        setLoading(true);
+        setIsSubmitting(true);
         try {
             await api.delete(`/dreams/${selectedDream.id}`);
             setShowDelete(false);
             resetForm();
-            fetchDreams();
+            mutate('/dreams');
         } catch (error) {
             console.error("Failed to archive dream", error);
         } finally {
-            setLoading(false);
+            setIsSubmitting(false);
         }
     };
 
@@ -187,7 +178,7 @@ const DreamsPage: React.FC = () => {
 
     return (
         <PageTransition>
-            {loading && <PageLoader />}
+            {(isLoading || isSubmitting) && <PageLoader />}
             <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
                     <h2>Your Dreams</h2>
