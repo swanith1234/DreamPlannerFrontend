@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -27,9 +28,36 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+
+        <!--
+          Android only lets one FirebaseMessagingService actually receive messages per
+          app. We need our own (MyFcmMessagingService) so interactive task-progress
+          pushes can be built with real action buttons + RemoteInput, which Capacitor's
+          plugin does not support on Android. So: remove the plugin's own declaration
+          from the merged manifest, then register our subclass in its place. (Verify
+          this merged correctly via Build > Analyze APK, or by inspecting
+          app/build/intermediates/merged_manifests/*/AndroidManifest.xml, if
+          interactive pushes silently fall back to plain notifications.)
+        -->
+        <service
+            android:name="com.capacitorjs.plugins.pushnotifications.MessagingService"
+            tools:node="remove" />
+
+        <service
+            android:name=".MyFcmMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <receiver
+            android:name=".TaskActionReceiver"
+            android:exported="false" />
     </application>
 
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 </manifest>

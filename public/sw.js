@@ -32,36 +32,66 @@ self.addEventListener('push', function (event) {
     }
 });
 
-self.addEventListener('notificationclick', function (event) {
-    console.log('On notification click: ', event.notification.tag);
+// POSTs to the notification-action endpoint with cookie auth, retrying once after
+// a silent /auth/refresh if the 15-minute access-token cookie has already expired
+// (very likely for anything but the most immediate notification interactions).
+async function postNotificationAction(apiUrl, apiPath, body) {
+    const doPost = () =>
+        fetch(`${apiUrl}${apiPath}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include', // sends the httpOnly accessToken/refreshToken cookies
+            body: JSON.stringify(body)
+        });
 
-    // If an action button was clicked, handle it silently without opening the app window
+    let response = await doPost();
+
+    if (response.status === 401) {
+        const refreshed = await fetch(`${apiUrl}/api/auth/refresh`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+        if (refreshed.ok) {
+            response = await doPost();
+        }
+    }
+
+    return response;
+}
+
+self.addEventListener('notificationclick', function (event) {
+    console.log('On notification click: ', event.notification.tag, event.action);
+
+    // If an action button (or the inline text-reply box) was used, handle it
+    // silently without opening the app window.
     if (event.action) {
         const { apiUrl, apiPath } = event.notification.data;
-        let deltaValue = 0;
-        if (event.action === 'add_25') deltaValue = 25;
-        else if (event.action === 'add_50') deltaValue = 50;
-        else if (event.action === 'mark_done') deltaValue = 100;
 
-        if (deltaValue > 0) {
-            const now = new Date();
-            const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        if (!apiPath) {
+            event.notification.close();
+            return;
+        }
 
+        const now = new Date();
+        const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+        let body = null;
+        if (event.action === 'add_25') body = { delta: 25, localDate };
+        else if (event.action === 'add_50') body = { delta: 50, localDate };
+        else if (event.action === 'mark_done') body = { delta: 100, localDate };
+        else if (event.action === 'reply') body = { text: event.reply || '', localDate };
+
+        if (body) {
             event.waitUntil(
-                fetch(`${apiUrl}${apiPath}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    credentials: 'include', // Includes HTTP-only cookies securely
-                    body: JSON.stringify({ delta: deltaValue, localDate })
-                }).then(response => {
-                    console.log(`Task progress updated by +${deltaValue} from push action`);
-                    event.notification.close();
-                }).catch(error => {
-                    console.error('Failed to update task progress from push action', error);
-                    event.notification.close();
-                })
+                postNotificationAction(apiUrl, apiPath, body)
+                    .then(response => {
+                        console.log(`Notification action '${event.action}' → ${response.status}`);
+                        event.notification.close();
+                    })
+                    .catch(error => {
+                        console.error('Failed to post notification action', error);
+                        event.notification.close();
+                    })
             );
             return;
         }

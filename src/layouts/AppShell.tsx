@@ -62,10 +62,9 @@ const AppShell: React.FC = () => {
                 });
 
                 PushNotifications.addListener('registration', async (token) => {
-                    alert("Native Registration Success: " + token.value.substring(0, 5) + "...");
                     try {
                         localStorage.setItem('fcm_token_native', token.value);
-                        
+
                         const subscriptionPayload = {
                             endpoint: token.value,
                             keys: {
@@ -73,21 +72,26 @@ const AppShell: React.FC = () => {
                                 auth: 'NATIVE'
                             }
                         };
-                        console.log("Syncing token to backend...", subscriptionPayload);
-                        alert("Syncing to backend: " + api.defaults.baseURL);
                         await api.post('/notifications/subscribe', subscriptionPayload);
-                        alert("Sync successful! Entry created in DB.");
                     } catch (err: any) {
-                        const errMsg = err.response?.data?.message || err.message || "Unknown Network Error";
-                        alert("Sync Failed: " + errMsg);
-                        console.error("Failed to sync Native FCM token", err);
+                        console.error("Failed to sync native FCM token", err);
                     }
                 });
 
                 PushNotifications.addListener('registrationError', (error: any) => {
-                    alert("Native Registration Error: " + JSON.stringify(error));
+                    console.error("Native push registration error", error);
                 });
 
+                // NOTE on interactive (task-progress) notifications: those are built
+                // entirely natively by MyFcmMessagingService.java, and its action
+                // buttons/inline-reply are handled by a plain BroadcastReceiver
+                // (TaskActionReceiver.java) that never wakes this JS runtime at all —
+                // that's what makes them instant and work even if the app was killed.
+                // This listener only ever sees:
+                //   - actionId === 'tap'   → the user tapped a notification body; route
+                //                            to the screen it was about (or /app/home).
+                //   - actionId === 'reply' → legacy/iOS-only inline-reply category,
+                //                            forwarded to the AI chat as free text.
                 PushNotifications.addListener('pushNotificationActionPerformed', async (notification) => {
                     if (notification.actionId === 'reply' && notification.inputValue) {
                         try {
@@ -95,6 +99,12 @@ const AppShell: React.FC = () => {
                         } catch (e) {
                             console.error("Failed to send silent chat reply", e);
                         }
+                        return;
+                    }
+
+                    if (notification.actionId === 'tap') {
+                        const url = notification.notification?.data?.url;
+                        if (url) navigate(url);
                     }
                 });
                 // Auto-register if permission already granted to ensure token is synced
