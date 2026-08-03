@@ -20,11 +20,20 @@ import java.nio.charset.StandardCharsets;
  *
  * Handles two types of notification actions fired by the user:
  *
- *  1. ACTION_PROGRESS  — user tapped a progress button ([+25%], [+50%], [Mark Done])
- *     → POSTs {notificationId, userId, type:'PROGRESS', value:N} to /api/notifications/action
+ *  1. ACTION_PROGRESS  — user tapped a progress button ([+10%], [Complete])
+ *     → POSTs {notificationId, actionToken, type:'PROGRESS', value:N, idempotencyKey}
  *
  *  2. ACTION_REPLY     — user typed text in the RemoteInput box and hit Send
- *     → POSTs {notificationId, userId, type:'REPLY', text:'...'} to /api/notifications/action
+ *     → POSTs {notificationId, actionToken, type:'REPLY', text, idempotencyKey}
+ *
+ * AUTHENTICATION: a BroadcastReceiver has no access to the WebView's cookies, so
+ * these calls carry a signed `actionToken` minted by the backend at dispatch time.
+ * We deliberately do NOT send a userId — the previous contract did, and the server
+ * trusted it, which let anyone mutate any account's tasks.
+ *
+ * IDEMPOTENCY: `idempotencyKey` is derived from the notification id and the action
+ * (not randomly generated), so it is stable across PendingIntent replays. The
+ * backend applies a given key at most once.
  *
  * After a successful POST the notification is updated to show "✓ Logged!" then dismissed.
  * Network call is done on a background thread to avoid blocking the main thread.
@@ -37,11 +46,17 @@ public class NotificationActionReceiver extends BroadcastReceiver {
 
         final String action         = intent.getAction();
         final String notificationId = intent.getStringExtra(MyFirebaseMessagingService.EXTRA_NOTIFICATION_ID);
-        final String userId         = intent.getStringExtra(MyFirebaseMessagingService.EXTRA_USER_ID);
+        final String actionToken    = intent.getStringExtra(MyFirebaseMessagingService.EXTRA_ACTION_TOKEN);
         final String taskId         = intent.getStringExtra(MyFirebaseMessagingService.EXTRA_TASK_ID);
         final int    notifIntId     = intent.getIntExtra(MyFirebaseMessagingService.EXTRA_NOTIF_INT_ID, 0);
+        final String idemKey        = intent.getStringExtra(MyFirebaseMessagingService.EXTRA_IDEMPOTENCY_KEY);
 
-        if (notificationId == null || userId == null) return;
+        // The action token IS the credential. Without it the backend has no way to
+        // establish identity, so there is nothing useful to send.
+        if (notificationId == null || notificationId.isEmpty()
+                || actionToken == null || actionToken.isEmpty()) {
+            return;
+        }
 
         SharedPreferences prefs = context.getSharedPreferences(
                 MyFirebaseMessagingService.PREFS_NAME, Context.MODE_PRIVATE);
@@ -57,7 +72,8 @@ public class NotificationActionReceiver extends BroadcastReceiver {
             showUpdatingState(context, notifIntId);
 
             new Thread(() -> {
-                boolean ok = postAction(apiUrl, buildProgressJson(notificationId, userId, progressValue));
+                boolean ok = postAction(apiUrl,
+                        buildProgressJson(notificationId, actionToken, progressValue, idemKey));
                 updateNotificationAfterAction(context, notifIntId, ok
                         ? "✓ Progress logged! Keep going 🚀"
                         : "⚠ Could not update — check your connection.");
@@ -78,7 +94,11 @@ public class NotificationActionReceiver extends BroadcastReceiver {
             showSendingState(context, notifIntId, text);
 
             new Thread(() -> {
-                boolean ok = postAction(apiUrl, buildReplyJson(notificationId, userId, text));
+                // Hash the text so an exact retry of the same reply dedupes, while a
+                // genuinely different reply still goes through.
+                String replyKey = notificationId + "|REPLY|" + text.hashCode();
+                boolean ok = postAction(apiUrl,
+                        buildReplyJson(notificationId, actionToken, text, replyKey));
                 updateNotificationAfterAction(context, notifIntId, ok
                         ? "✓ Reply sent! I'll respond shortly 💬"
                         : "⚠ Could not send — check your connection.");
@@ -119,17 +139,20 @@ public class NotificationActionReceiver extends BroadcastReceiver {
 
     // ── JSON builders ─────────────────────────────────────────────────────────
 
-    private String buildProgressJson(String notificationId, String userId, String value) {
+    private String buildProgressJson(String notificationId, String actionToken, String value, String idemKey) {
         return String.format(
-                "{\"notificationId\":\"%s\",\"userId\":\"%s\",\"type\":\"PROGRESS\",\"value\":%s}",
-                esc(notificationId), esc(userId), (value != null ? value : "0")
+                "{\"notificationId\":\"%s\",\"actionToken\":\"%s\",\"type\":\"PROGRESS\","
+                        + "\"value\":%s,\"idempotencyKey\":\"%s\"}",
+                esc(notificationId), esc(actionToken),
+                (value != null ? value : "0"), esc(idemKey != null ? idemKey : "")
         );
     }
 
-    private String buildReplyJson(String notificationId, String userId, String text) {
+    private String buildReplyJson(String notificationId, String actionToken, String text, String idemKey) {
         return String.format(
-                "{\"notificationId\":\"%s\",\"userId\":\"%s\",\"type\":\"REPLY\",\"text\":\"%s\"}",
-                esc(notificationId), esc(userId), esc(text)
+                "{\"notificationId\":\"%s\",\"actionToken\":\"%s\",\"type\":\"REPLY\","
+                        + "\"text\":\"%s\",\"idempotencyKey\":\"%s\"}",
+                esc(notificationId), esc(actionToken), esc(text), esc(idemKey != null ? idemKey : "")
         );
     }
 

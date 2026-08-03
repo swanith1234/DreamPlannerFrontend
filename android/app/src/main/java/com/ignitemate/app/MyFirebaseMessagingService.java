@@ -47,6 +47,13 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
     static final String EXTRA_TASK_ID         = "taskId";
     static final String EXTRA_PROGRESS_VALUE  = "progressValue";
     static final String EXTRA_NOTIF_INT_ID    = "notifIntId";
+    // Signed capability token minted by the backend at dispatch time. This is what
+    // authenticates the action — the receiver has no cookie jar, and a body-supplied
+    // userId cannot be trusted.
+    static final String EXTRA_ACTION_TOKEN    = "actionToken";
+    // Stable per-(notification, action) key so an OS PendingIntent replay or an
+    // HTTP retry cannot apply the same delta twice.
+    static final String EXTRA_IDEMPOTENCY_KEY = "idempotencyKey";
     static final String PREFS_NAME            = "IgniteMatePrefs";
     static final String PREFS_API_URL         = "apiUrl";
     static final String PREFS_USER_ID         = "userId";
@@ -80,6 +87,11 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         String actionsJson    = getOrDefault(data, "actions", "[]");
         String apiUrl         = getOrDefault(data, "apiUrl", "");
         String userId         = getOrDefault(data, "userId", "");
+        String actionToken    = getOrDefault(data, "actionToken", "");
+        // Explicit route from the backend. Previously this service rebuilt the path
+        // from `taskId`, but the backend only ever sent `url` — so taskId was always
+        // empty and every body tap landed on /app/home.
+        String deepLink       = getOrDefault(data, "deepLink", getOrDefault(data, "url", ""));
 
         // Persist apiUrl + userId so NotificationActionReceiver can read them
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
@@ -90,7 +102,7 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         int notifIntId = notificationId.isEmpty() ? (int) System.currentTimeMillis() : notificationId.hashCode();
 
         createNotificationChannel();
-        buildAndShow(title, body, notificationId, taskId, notifIntId, actionsJson, userId);
+        buildAndShow(title, body, notificationId, taskId, notifIntId, actionsJson, actionToken, deepLink);
     }
 
     // ── Build the local notification ───────────────────────────────────────────
@@ -98,14 +110,15 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
     private void buildAndShow(
             String title, String body,
             String notificationId, String taskId,
-            int notifIntId, String actionsJson, String userId) {
+            int notifIntId, String actionsJson,
+            String actionToken, String deepLink) {
 
         NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
 
         // ── Body tap intent: open app and navigate to task page ──────────────
         Intent openIntent = new Intent(this, MainActivity.class);
         openIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        openIntent.putExtra("deepLink", taskId.isEmpty() ? "/app/home" : "/app/tasks/" + taskId);
+        openIntent.putExtra("deepLink", deepLink.isEmpty() ? "/app/home" : deepLink);
         openIntent.putExtra(EXTRA_NOTIFICATION_ID, notificationId);
 
         PendingIntent openPendingIntent = PendingIntent.getActivity(
@@ -122,7 +135,7 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         Intent replyIntent = new Intent(ACTION_REPLY);
         replyIntent.setPackage(getPackageName());
         replyIntent.putExtra(EXTRA_NOTIFICATION_ID, notificationId);
-        replyIntent.putExtra(EXTRA_USER_ID, userId);
+        replyIntent.putExtra(EXTRA_ACTION_TOKEN, actionToken);
         replyIntent.putExtra(EXTRA_TASK_ID, taskId);
         replyIntent.putExtra(EXTRA_NOTIF_INT_ID, notifIntId);
 
@@ -151,7 +164,9 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         // Parse action buttons from the JSON sent by backend
         try {
             JSONArray actions = new JSONArray(actionsJson);
-            for (int i = 0; i < actions.length() && i < 3; i++) {
+            // Android renders at most 3 notification actions and the Reply action
+            // above already takes one slot — a 3rd progress button is silently dropped.
+            for (int i = 0; i < actions.length() && i < 2; i++) {
                 JSONObject action = actions.getJSONObject(i);
                 String label      = action.getString("label");
                 String actionType = action.getString("actionType");
@@ -160,10 +175,16 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
                 Intent progressIntent = new Intent(ACTION_PROGRESS);
                 progressIntent.setPackage(getPackageName());
                 progressIntent.putExtra(EXTRA_NOTIFICATION_ID, notificationId);
-                progressIntent.putExtra(EXTRA_USER_ID, userId);
+                progressIntent.putExtra(EXTRA_ACTION_TOKEN, actionToken);
                 progressIntent.putExtra(EXTRA_TASK_ID, taskId);
                 progressIntent.putExtra(EXTRA_PROGRESS_VALUE, value);
                 progressIntent.putExtra(EXTRA_NOTIF_INT_ID, notifIntId);
+                // Deterministic (not random): baked into the PendingIntent, so an OS
+                // replay of the SAME tap reuses the same key and the backend applies
+                // the delta once. A later, genuinely new notification has a different
+                // notificationId and therefore a different key.
+                progressIntent.putExtra(EXTRA_IDEMPOTENCY_KEY,
+                        notificationId + "|PROGRESS|" + value);
 
                 PendingIntent progressPending = PendingIntent.getBroadcast(
                         this, notifIntId + 10 + i,

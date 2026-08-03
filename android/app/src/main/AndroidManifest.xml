@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- ── Permissions ──────────────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -59,6 +60,31 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <!--
+            Remove the @capacitor/push-notifications plugin's own MessagingService
+            from the merged manifest.
+
+            WHY: FCM dispatches a message to exactly ONE service registered for
+            com.google.firebase.MESSAGING_EVENT — the first match returned by
+            PackageManager. With both the plugin's service and ours declared, which
+            one wins is not guaranteed. If the plugin's won, our data-only payload
+            (no `notification` block) rendered NOTHING at all, because building the
+            visible notification is our service's job. That non-determinism is the
+            "delivery issues" behind the earlier revert.
+
+            SAFE because token registration does not depend on this service:
+            PushNotificationsPlugin.register() calls FirebaseMessaging.getToken()
+            directly and fires the JS `registration` event from that callback.
+
+            TRADE-OFF: the plugin's `pushNotificationReceived` JS event and
+            onNewToken-driven token rotation no longer fire. We don't use the
+            former, and AppShell calls register() on every launch, so a rotated
+            token re-syncs on next app start.
+        -->
+        <service
+            android:name="com.capacitorjs.plugins.pushnotifications.MessagingService"
+            tools:node="remove" />
 
         <!-- ── Notification Action Broadcast Receiver ─────────────────────── -->
         <!--

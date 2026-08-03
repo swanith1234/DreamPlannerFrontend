@@ -207,7 +207,7 @@ const SettingsPage: React.FC = () => {
                                                     keys: { p256dh: 'NATIVE', auth: 'NATIVE' }
                                                 });
 
-                                                alert("Notifications enabled! Token synced to backend.");
+                                                alert("Notifications enabled!");
                                             } catch (err: any) {
                                                 alert("Enable failed: " + (err.message || "Unknown error"));
                                                 setNotifications(false);
@@ -260,18 +260,18 @@ const SettingsPage: React.FC = () => {
                                             try {
                                                 const savedToken = localStorage.getItem('fcm_token_native');
                                                 if (savedToken) {
-                                                    alert("Unsubscribing: " + savedToken.substring(0, 10) + "...");
+                                                    // Debug alerts removed: they fired on every toggle and
+                                                    // echoed a prefix of the FCM token to the screen.
+                                                    console.debug('[push] unsubscribing native token');
                                                     await api.post('/notifications/unsubscribe', { endpoint: savedToken });
                                                     localStorage.removeItem('fcm_token_native');
-                                                    alert("Unsubscribe API call finished.");
                                                 } else {
-                                                    alert("No local token found to unsubscribe.");
+                                                    console.debug('[push] no local token to unsubscribe');
                                                 }
                                             } catch (err: any) {
                                                 alert("Disable failed: " + (err.message || "Unknown error"));
                                                 setNotifications(true); // Revert
                                             }
-                                            alert("Push notifications toggle finished.");
                                             return;
                                         }
                                         if ('serviceWorker' in navigator) {

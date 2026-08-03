@@ -62,30 +62,31 @@ const AppShell: React.FC = () => {
                 });
 
                 PushNotifications.addListener('registration', async (token) => {
-                    alert("Native Registration Success: " + token.value.substring(0, 5) + "...");
+                    // NOTE: this fires from PushNotificationsPlugin.register(), which
+                    // calls FirebaseMessaging.getToken() directly — it does NOT depend
+                    // on a MessagingService. That is why removing the plugin's
+                    // MessagingService from the merged manifest (so our own service can
+                    // build actionable notifications) does not break token sync.
+                    console.debug('[push] native registration ok');
                     try {
                         localStorage.setItem('fcm_token_native', token.value);
-                        
-                        const subscriptionPayload = {
+
+                        await api.post('/notifications/subscribe', {
                             endpoint: token.value,
                             keys: {
                                 p256dh: 'NATIVE',
                                 auth: 'NATIVE'
                             }
-                        };
-                        console.log("Syncing token to backend...", subscriptionPayload);
-                        alert("Syncing to backend: " + api.defaults.baseURL);
-                        await api.post('/notifications/subscribe', subscriptionPayload);
-                        alert("Sync successful! Entry created in DB.");
+                        });
+                        console.debug('[push] token synced to backend');
                     } catch (err: any) {
-                        const errMsg = err.response?.data?.message || err.message || "Unknown Network Error";
-                        alert("Sync Failed: " + errMsg);
-                        console.error("Failed to sync Native FCM token", err);
+                        const errMsg = err.response?.data?.message || err.message || 'Unknown network error';
+                        console.error('[push] failed to sync native FCM token:', errMsg, err);
                     }
                 });
 
                 PushNotifications.addListener('registrationError', (error: any) => {
-                    alert("Native Registration Error: " + JSON.stringify(error));
+                    console.error('[push] native registration error:', error);
                 });
 
                 PushNotifications.addListener('pushNotificationActionPerformed', async (notification) => {
