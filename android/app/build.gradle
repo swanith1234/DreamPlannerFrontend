@@ -22,6 +22,13 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
+    // Match every Capacitor module, all of which declare VERSION_21. :app was the
+    // only module with no compileOptions, so it silently fell back to the AGP
+    // default (Java 8) while consuming Java 21 AARs.
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
 }
 
 repositories {

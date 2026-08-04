@@ -45,12 +45,21 @@ jobs:
       - name: Sync Capacitor to Android
         run: npx cap sync android
 
-      # ── 4. Java 17 (required by Android Gradle Plugin) ───────────────────────
-      - name: Set up Java 17
+      # ── 4. Java 21 (required by Capacitor 8) ────────────────────────────────
+      # Every Capacitor module declares sourceCompatibility/targetCompatibility
+      # JavaVersion.VERSION_21 (@capacitor/android, push-notifications,
+      # preferences, capacitor-cordova-android-plugins). JDK 17's javac cannot
+      # accept -source 21 and fails during compiler init, before any of our code
+      # is even looked at:
+      #
+      #   Execution failed for task ':capacitor-android:compileDebugJavaWithJavac'
+      #   > Java compilation initialization error
+      #       error: invalid source release: 21
+      - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
       # ── 5. Cache Gradle (cuts build time from ~4 min → ~90 sec) ─────────────
       - name: Cache Gradle packages
